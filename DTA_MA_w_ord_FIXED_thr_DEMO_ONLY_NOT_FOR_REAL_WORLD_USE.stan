@@ -75,38 +75,38 @@ transformed parameters {
 model {
       
       //// Between-study heterogenity priors:
-      beta_d_z        ~ normal(0.0, 1.0);
-      log_scale_d_z   ~ normal(0.0, 1.0);
-      beta_d_mu       ~ normal(0.0, 1.0);
-      log_scale_d_mu  ~ normal(0.0, 1.0);
-      beta_d_SD       ~ normal(0.0, 1.0);
-      log_scale_d_SD  ~ normal(0.0, 1.0);
+      target += normal_lpdf(beta_d_z       | 0.0, 1.0);
+      target += normal_lpdf(log_scale_d_z  | 0.0, 1.0);
+      target += normal_lpdf(beta_d_mu      | 0.0, 1.0);
+      target += normal_lpdf(log_scale_d_mu | 0.0, 1.0);
+      target += normal_lpdf(beta_d_SD      | 0.0, 1.0);
+      target += normal_lpdf(log_scale_d_SD | 0.0, 1.0);
       //// Induced-Dirichlet priors for cutpoints (FIXED between studies):
-      C_non_diseased ~ induced_dirichlet(alpha_non_diseased, 0.0);
-      C_diseased     ~ induced_dirichlet(alpha_diseased, 0.0);
+      target += induced_dirichlet_lpdf( C_non_diseased | alpha_non_diseased, 0.0);
+      target += induced_dirichlet_lpdf( C_diseased | alpha_diseased, 0.0);
        
       //// Likelihood using binomial factorization:
       for (s in 1:n_studies) {
               
               //// Non-diseased group (fixed parameters)
               if (x_non_diseased[s, 1] != 999) {
-                  x_non_diseased[s, 1] ~ binomial( n_non_diseased[s], Phi(C_non_diseased[1]) );
+                       target += binomial_lpmf( x_non_diseased[s, 1] | n_non_diseased[s], Phi(C_non_diseased[1]) );
               }
               
               for (k in 2:n_thr) {
                    if (x_non_diseased[s, k] != 999) {
-                    x_non_diseased[s, k] ~ binomial( x_non_diseased[s, k-1], Phi(C_non_diseased[k]) / Phi(C_non_diseased[k-1]) );
+                       target += binomial_lpmf(  x_non_diseased[s, k] | x_non_diseased[s, k-1], Phi(C_non_diseased[k]) / Phi(C_non_diseased[k-1]) );
                    }
               }
               
               //// Diseased group (D+):
               if (x_diseased[s, 1] != 999) {
-                 x_diseased[s, 1] ~ binomial( n_diseased[s], Phi((beta_d[s] - C_diseased[1])/scale_d[s]) );
+                       target += binomial_lpmf(  x_diseased[s, 1] | n_diseased[s], Phi((beta_d[s] - C_diseased[1])/scale_d[s]) );
               }
               
               for (k in 2:n_thr) {
                  if (x_diseased[s, k] != 999) {
-                      x_diseased[s, k] ~ binomial( x_diseased[s,k-1], Phi((beta_d[s] - C_diseased[k])/scale_d[s]) /  Phi((beta_d[s] - C_diseased[k-1])/scale_d[s]) );
+                       target += binomial_lpmf(  x_diseased[s, k] | x_diseased[s,k-1], Phi((beta_d[s] - C_diseased[k])/scale_d[s]) /  Phi((beta_d[s] - C_diseased[k-1])/scale_d[s]) );
                  }
               }
         
@@ -127,15 +127,15 @@ generated quantities {
         //// Calculate study-specific accuracy:
         for (s in 1:n_studies) {
               for (k in 1:n_thr) {
-                  se[s][k] = 1.0 - Phi((C_diseased[k] - beta_d[s])/scale_d[s]);
-                  sp[s][k] = Phi(C_non_diseased[k]);
+                  se[s][k] =  Phi((C_diseased[k] - beta_d[s])/scale_d[s]);
+                  sp[s][k] =  1.0 - Phi(C_non_diseased[k]);
               }
         }
         
         //// Calculate summary accuracy (using mean parameters):
         for (k in 1:n_thr) {
-            Se[k] = 1.0 - Phi((C_diseased[k] - beta_d_mu)/exp(log_scale_d_mu));
-            Sp[k] = Phi(C_non_diseased[k]);
+            Se[k] =        Phi((C_diseased[k] - beta_d_mu)/exp(log_scale_d_mu));
+            Sp[k] =  1.0 - Phi(C_non_diseased[k]);
         }
         
         //// Calculate predictive accuracy:
@@ -144,8 +144,8 @@ generated quantities {
             real scale_d_pred = exp(normal_rng(log_scale_d_mu, log_scale_d_SD));
             
             for (k in 1:n_thr) {
-                Se_pred[k] = 1 - Phi((C_diseased[k] - beta_d_pred)/scale_d_pred);
-                Sp_pred[k] = Phi(C_non_diseased[k]);
+                Se_pred[k] =  Phi((C_diseased[k] - beta_d_pred)/scale_d_pred);
+                Sp_pred[k] =  1.0 - Phi(C_non_diseased[k]);
             }
         }
     

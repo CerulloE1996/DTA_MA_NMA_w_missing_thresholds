@@ -1,4 +1,28 @@
 
+//// NOTE: This verion is more flexible than the other "RANDOM_thr" (fixed thresholds) version of the
+//// model because we are not assuming that the mean/location parameters in the non-diseasded group 
+//// are all equal to zero and also allows for between-study heterogenity in the study-specific 
+//// mean parameters in BOTH groups. 
+//// We can typically do this without identifiability issues, especially in our case since the 
+/// within-study models are:
+//// (i) univariate, and:
+//// (ii) NOT latent class (i.e. assuming a perfect gold standard) 
+//// - this makes identification of parameters (in general) much easier. 
+////
+//// Also, please see the Michael Betancourt case study to understand why - particulaly in the Bayesian case 
+//// and especially when we use an Induced Dirichlet model (or prior model) - that identifiability is not as
+//// much of an issue and that we can freely estimate means AND cutpoint parameters in BOTH groups, link is here: 
+//// https://betanalpha.github.io/assets/case_studies/ordinal_regression.html
+//// Specifically, in this case study he he demonstrates that whilst there is indeed a theoretical 
+//// location/mean "non-identifiability"" (since shifting means and cutpoints by a constant preserves the 
+//// ordinal probabilities), in practice having an informative prior on one set of parameters
+//// (e.g. the mean) sufficiently anchors the model - especially one based on the Induced Dirichlet prior model
+//// (which allows us to set priors * directly * on the induced ordinal probabilities). 
+////
+//// Note that this cannot be said about frequentist versions of our model nor can it be said about models
+//// which naively use so-called "vague" priors. 
+
+
 functions {
   
         real induced_dirichlet_lpdf(  vector c, 
@@ -62,6 +86,10 @@ parameters {
       simplex[n_thr + 1] phi_nd; // for induced-dirichlet between-study cutpoint model
       real<lower=0> kappa_d;  // for induced-dirichlet between-study cutpoint model
       real<lower=0> kappa_nd; // for induced-dirichlet between-study cutpoint model
+      //// For non-diseased group only: 
+      real beta_nd_mu; 
+      real<lower=0> beta_nd_SD;   
+      vector[n_studies] beta_nd_z;    // Study-specific random effects for beta (off-centered parameterisation)
   
 }
 
@@ -75,6 +103,8 @@ transformed parameters {
       //// for induced-dirichlet between-study cutpoint model:
       vector<lower=0>[n_thr + 1] alpha_d =  phi_d*kappa_d;
       vector<lower=0>[n_thr + 1] alpha_nd = phi_nd*kappa_nd;
+      //// Estimate means in the non-diseased group (but consider fixing the scales in this group for identifiability - especially if you also want cutpoints to vary between studies):
+      vector[n_studies] beta_nd =     beta_nd_mu      + beta_nd_z      .* beta_nd_SD; 
       
 }
 
@@ -91,6 +121,12 @@ model {
       //// Induced-Dirichlet priors for cutpoints (FIXED between studies):
       target += normal_lpdf(kappa_d  | 0.0, 50.0);
       target += normal_lpdf(kappa_nd | 0.0, 50.0);
+      //// For non-diseased group only: 
+      target += normal_lpdf( beta_nd_z  | 0.0, 1.0);
+      target += normal_lpdf( beta_nd_mu | 0.0, 1.0);
+      target += normal_lpdf( beta_nd_SD | 0.0, 1.0);
+              
+
                   
       //// Likelihood using binomial factorization:
       //// Induced-dirichlet between study ** model ** (NOT a prior model here but part of the actual likelihood since random-effect cutpoints!):
@@ -102,23 +138,23 @@ model {
               
               //// Non-diseased group (fixed parameters)
               if (x_non_diseased[s, 1] != 999) {
-                       target += binomial_lpmf(  x_non_diseased[s, 1] | n_non_diseased[s], Phi(C_non_diseased[s, 1]) );
+                       target += binomial_lpmf(  x_non_diseased[s, 1] | n_non_diseased[s], Phi(beta_nd[s] - C_non_diseased[s, 1]) );
               }
               
               for (k in 2:n_thr) {
                    if (x_non_diseased[s, k] != 999) {
-                       target += binomial_lpmf(  x_non_diseased[s, k] | x_non_diseased[s, k - 1], Phi(C_non_diseased[s, k]) / Phi(C_non_diseased[s, k - 1]) );
+                       target += binomial_lpmf(  x_non_diseased[s, k] |x_non_diseased[s, k - 1], Phi(beta_nd[s] - C_non_diseased[s, k]) / Phi(beta_nd[s] - C_non_diseased[s, k - 1]) );
                    }
               }
               
               //// Diseased group (D+):
               if (x_diseased[s, 1] != 999) {
-                       target += binomial_lpmf( x_diseased[s, 1] | n_diseased[s], Phi((beta_d[s] - C_diseased[s, 1])/scale_d[s]) );
+                       target += binomial_lpmf(  x_diseased[s, 1] | n_diseased[s], Phi((beta_d[s] - C_diseased[s, 1])/scale_d[s]) );
               }
               
               for (k in 2:n_thr) {
                  if (x_diseased[s, k] != 999) {
-                       target += binomial_lpmf(  x_diseased[s, k] | x_diseased[s, k - 1], Phi((beta_d[s] - C_diseased[s, k])/scale_d[s]) /  Phi((beta_d[s] - C_diseased[s, k - 1])/scale_d[s]) );
+                      target += binomial_lpmf(   x_diseased[s, k] | x_diseased[s, k - 1], Phi((beta_d[s] - C_diseased[s, k])/scale_d[s]) /  Phi((beta_d[s] - C_diseased[s, k - 1])/scale_d[s]) );
                  }
               }
         
@@ -170,25 +206,27 @@ generated quantities {
         //// Calculate study-specific accuracy:
         for (s in 1:n_studies) {
               for (k in 1:n_thr) {
-                  se[s][k] =       Phi((C_diseased[s, k] - beta_d[s])/scale_d[s]);
-                  sp[s][k] = 1.0 - Phi(C_non_diseased[s, k]);
+                  se[s][k] =        Phi((C_diseased[s, k]    - beta_d[s])/scale_d[s]);
+                  sp[s][k] =  1.0 - Phi(C_non_diseased[s, k] - beta_nd[s]);
               }
         }
         
         //// Calculate summary accuracy (using mean parameters):
         for (k in 1:n_thr) {
-            Se[k] =       Phi((C_diseased_mu[k] - beta_d_mu)/exp(log_scale_d_mu));
-            Sp[k] = 1.0 - Phi(C_non_diseased_mu[k]);
+            Se[k] =         Phi((C_diseased_mu[k]    - beta_d_mu)/exp(log_scale_d_mu));
+            Sp[k] =  1.0 -  Phi(C_non_diseased_mu[k] - beta_nd_mu);
         }
         
         //// Calculate predictive accuracy:
         {
             real beta_d_pred =  normal_rng(beta_d_mu, beta_d_SD);
             real scale_d_pred = exp(normal_rng(log_scale_d_mu, log_scale_d_SD));
+            //// For non-diseased group only: 
+            real beta_nd_pred = normal_rng(beta_nd_mu, beta_nd_SD);
             
             for (k in 1:n_thr) {
-                Se_pred[k] =       Phi((C_diseased_mu[k] - beta_d_pred)/scale_d_pred);
-                Sp_pred[k] = 1.0 - Phi(C_non_diseased_mu[k]);
+                Se_pred[k] =        Phi((C_diseased_mu[k]    - beta_d_pred)/scale_d_pred);
+                Sp_pred[k] =  1.0 - Phi(C_non_diseased_mu[k] - beta_nd_pred);
             }
         }
     

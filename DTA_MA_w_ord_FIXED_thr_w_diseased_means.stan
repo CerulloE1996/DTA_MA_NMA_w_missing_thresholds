@@ -3,10 +3,11 @@
 //// version because it allows the Sp's to vary between studies eventhough the thresholds are still fixed 
 //// between studies. 
 //// This is because we have introduced mean parameters for the within-study ordinal-probit models in
-//// BOTH groups - we can do this without identifiability issues as the within-study models are:
+//// BOTH groups (i.e. not only in the diseased group) - we can do this without identifiability issues 
+//// - especially in our case where the within-study models are:
 //// (i) univariate, and:
 //// (ii) NOT latent class (i.e. assuming a perfect gold standard) 
-//// - this makes identification of parameters much easier. 
+//// - this makes identification of parameters (in general) much easier. 
 ////
 //// Also, please see the Michael Betancourt case study to understand why - particulaly in the Bayesian case 
 //// and especially when we use an Induced Dirichlet model (or prior model) - that identifiability is not as
@@ -17,6 +18,9 @@
 //// ordinal probabilities), in practice having an informative prior on one set of parameters
 //// (e.g. the mean) sufficiently anchors the model - especially one based on the Induced Dirichlet prior model
 //// (which allows us to set priors * directly * on the induced ordinal probabilities). 
+////
+//// Note that this cannot be said about frequentist versions of our model nor can it be said about models
+//// which naively use so-called "vague" priors. 
 
 functions {
   
@@ -100,42 +104,42 @@ transformed parameters {
 model {
       
       //// Between-study heterogenity priors:
-      beta_d_z        ~ normal(0.0, 1.0);
-      log_scale_d_z   ~ normal(0.0, 1.0);
-      beta_d_mu       ~ normal(0.0, 1.0);
-      log_scale_d_mu  ~ normal(0.0, 1.0);
-      beta_d_SD       ~ normal(0.0, 1.0);
-      log_scale_d_SD  ~ normal(0.0, 1.0);
+      target += normal_lpdf(beta_d_z       | 0.0, 1.0);
+      target += normal_lpdf(log_scale_d_z  | 0.0, 1.0);
+      target += normal_lpdf(beta_d_mu      | 0.0, 1.0);
+      target += normal_lpdf(log_scale_d_mu | 0.0, 1.0);
+      target += normal_lpdf(beta_d_SD      | 0.0, 1.0);
+      target += normal_lpdf(log_scale_d_SD | 0.0, 1.0);
       //// Induced-Dirichlet priors for cutpoints (FIXED between studies):
-      C_non_diseased ~ induced_dirichlet(alpha_non_diseased, 0.0);
-      C_diseased     ~ induced_dirichlet(alpha_diseased, 0.0);
+      target += induced_dirichlet_lpdf( C_non_diseased | alpha_non_diseased, 0.0);
+      target += induced_dirichlet_lpdf( C_diseased | alpha_diseased, 0.0);
       //// For non-diseased group only: 
-      beta_nd_z       ~ normal(0.0, 1.0);
-      beta_nd_mu      ~ normal(0.0, 1.0);
-      beta_nd_SD      ~ normal(0.0, 1.0);
+      target += normal_lpdf( beta_nd_z  | 0.0, 1.0);
+      target += normal_lpdf( beta_nd_mu | 0.0, 1.0);
+      target += normal_lpdf( beta_nd_SD | 0.0, 1.0);
        
       //// Likelihood using binomial factorization:
       for (s in 1:n_studies) {
               
               //// Non-diseased group (fixed parameters)
               if (x_non_diseased[s, 1] != 999) { //// If non-missing (i.e. only if study reports @ this ordinal cutpoint!)
-                     x_non_diseased[s, 1] ~ binomial( n_non_diseased[s], Phi(C_non_diseased[1]) );
+                       target += binomial_lpmf( x_non_diseased[s, 1] | n_non_diseased[s], Phi(beta_nd[s] - C_non_diseased[1]) );
               }
               
               for (k in 2:n_thr) {
                    if (x_non_diseased[s, k] != 999) { //// If non-missing (i.e. only if study reports @ this ordinal cutpoint!)
-                         x_non_diseased[s, k] ~ binomial( x_non_diseased[s, k - 1], Phi(C_non_diseased[k]) / Phi(C_non_diseased[k - 1]) );
+                       target += binomial_lpmf(  x_non_diseased[s, k] | x_non_diseased[s, k - 1], Phi(beta_nd[s] - C_non_diseased[k]) / Phi(beta_nd[s] - C_non_diseased[k - 1]) );
                    }
               }
               
               //// Diseased group (D+):
               if (x_diseased[s, 1] != 999) { //// If non-missing (i.e. only if study reports @ this ordinal cutpoint!)
-                    x_diseased[s, 1] ~ binomial( n_diseased[s], Phi((beta_d[s] - C_diseased[1])/scale_d[s]) );
+                       target += binomial_lpmf(  x_diseased[s, 1] | n_diseased[s], Phi((beta_d[s] - C_diseased[1])/scale_d[s]) );
               }
               
               for (k in 2:n_thr) {
                  if (x_diseased[s, k] != 999) { //// If non-missing (i.e. only if study reports @ this ordinal cutpoint!)
-                       x_diseased[s, k] ~ binomial( x_diseased[s, k - 1], Phi((beta_d[s] - C_diseased[k])/scale_d[s]) /  Phi((beta_d[s] - C_diseased[k - 1])/scale_d[s]) );
+                       target += binomial_lpmf(   x_diseased[s, k] | x_diseased[s, k - 1], Phi((beta_d[s] - C_diseased[k])/scale_d[s]) /  Phi((beta_d[s] - C_diseased[k - 1])/scale_d[s]) );
                  }
               }
         
@@ -176,7 +180,7 @@ generated quantities {
             real beta_nd_pred = normal_rng(beta_nd_mu, beta_nd_SD);
             
             for (k in 1:n_thr) {
-                Se_pred[k] =        Phi((C_diseased[k] - beta_d_pred)/scale_d_pred);
+                Se_pred[k] =        Phi((C_diseased[k]    - beta_d_pred)/scale_d_pred);
                 Sp_pred[k] =  1.0 - Phi(C_non_diseased[k] - beta_nd_pred);
             }
         }
