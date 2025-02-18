@@ -1,7 +1,6 @@
 
 functions {
   
-        // Induced Dirichlet from your code
         real induced_dirichlet_lpdf(  vector c, 
                                       vector alpha, 
                                       real phi) {
@@ -37,8 +36,8 @@ functions {
 
 data {
   
-      int<lower=1> n_studies;  // number of studies
-      int<lower=1> n_thr;  // number of categories - 1 (i.e., number of thresholds)
+      int<lower=1> n_studies;
+      int<lower=1> n_thr;
       vector<lower=0>[n_thr + 1] alpha_non_diseased; // Induced-Dirichlet prior vector 
       vector<lower=0>[n_thr + 1] alpha_diseased; // Induced-Dirichlet prior vector 
       array[n_studies] int<lower=1> n_non_diseased;  // number in non-diseased group in each study
@@ -117,33 +116,29 @@ model {
 
 generated quantities {
   
-        // Summary accuracy parameters (at each threshold)
-        vector[n_thr] Se;  // Sensitivity
-        vector[n_thr] Sp;  // Specificity
-        
-        // Predictive accuracy parameters
+        //// Summary accuracy parameters (at each threshold):
+        vector[n_thr] Se;
+        vector[n_thr] Sp;
         vector[n_thr] Se_pred;
         vector[n_thr] Sp_pred;
-        
-        // Study-specific parameters
         array[n_studies] vector[n_thr] se;
         array[n_studies] vector[n_thr] sp;
         
-        // Calculate study-specific accuracy
+        //// Calculate study-specific accuracy:
         for (s in 1:n_studies) {
-            for (k in 1:n_thr) {
-                se[s][k] = 1 - Phi((C_diseased[k] - beta_d[s])/scale_d[s]);
-                sp[s][k] = Phi(C_non_diseased[k]);
-            }
+              for (k in 1:n_thr) {
+                  se[s][k] = 1.0 - Phi((C_diseased[k] - beta_d[s])/scale_d[s]);
+                  sp[s][k] = Phi(C_non_diseased[k]);
+              }
         }
         
-        // Calculate summary accuracy (using mean parameters)
+        //// Calculate summary accuracy (using mean parameters):
         for (k in 1:n_thr) {
-            Se[k] = 1 - Phi((C_diseased[k] - beta_d_mu)/exp(log_scale_d_mu));
+            Se[k] = 1.0 - Phi((C_diseased[k] - beta_d_mu)/exp(log_scale_d_mu));
             Sp[k] = Phi(C_non_diseased[k]);
         }
         
-        // Calculate predictive accuracy
+        //// Calculate predictive accuracy:
         {
             real beta_d_pred = normal_rng(beta_d_mu, beta_d_SD);
             real scale_d_pred = exp(normal_rng(log_scale_d_mu, log_scale_d_SD));
