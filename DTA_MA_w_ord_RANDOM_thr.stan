@@ -50,8 +50,8 @@ data {
 
 parameters {
   
-      array[n_studies] ordered[n_thr] C_non_diseased;  // Global cutpoints (FIXED between studies)
-      array[n_studies] ordered[n_thr] C_diseased;  // Global cutpoints (FIXED between studies)
+      array[n_studies] ordered[n_thr] C_non_diseased;
+      array[n_studies] ordered[n_thr] C_diseased;
       real beta_d_mu;      // Mean in diseased group (0 in non-diseased for identifiability)
       real log_scale_d_mu;  // Scale in diseased group (1 in non-diseased for identifiability))
       real<lower=0> beta_d_SD;   
