@@ -9,8 +9,8 @@ require(dplyr)
 require(cmdstanr)
 
 n_studies <- 10
-N_per_study_mean <- 5000
-N_per_study_SD <- 1000
+N_per_study_mean <- 2500
+N_per_study_SD <- 500
 assume_perfect_GS <- 1
 seed <- 123
 
@@ -32,6 +32,9 @@ y_list <- sim_results$y_list
 sim_results$n_total_possible_thresholds_per_test
 str(y_list)
 
+sim_results$N_per_study_vec
+
+
 true_Se_OVERALL <- sim_results$Se_OVERALL_all_tests_all_thresholds[5, ] ; true_Se_OVERALL
 true_Sp_OVERALL <- sim_results$Sp_OVERALL_all_tests_all_thresholds[5, ] ; true_Sp_OVERALL
 true_Fp_OVERALL <- 1.0 - true_Sp_OVERALL ; true_Fp_OVERALL
@@ -42,8 +45,10 @@ sim_results$Se_per_study_all_tests_all_thresholds_list
 
 ## Now for the first example we will only take one index test, as initially we are evaluating just a "simple" model
 ## where there's only a single index test with 12 thresholds (so 13 categories:
-index_test_chosen_index <- 4
-n_thr <- 25
+##
+index_test_chosen_index <- 3
+n_thr <- 10
+##
 n_cat <- n_thr + 1
 y_list_example_1 <- list()
 for (s in 1:n_studies) { 

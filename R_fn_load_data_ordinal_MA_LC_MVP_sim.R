@@ -144,11 +144,17 @@ simulate_binary_and_ordinal_MA_LC_MVP_data <- function(   n_studies = 10,
              location_nd_study_s <- rnorm(n = n_tests, mean = location_nd,  sd = scale_nd)
              location_d_study_s  <- rnorm(n = n_tests, mean = location_d,   sd = scale_d)
              
-             Sigma_highly_varied <- matrix(c(1,     0.20,  0.20,     0.20,     0.20,
-                                             0.20,  1.00,  0.50,     0.20,     0.10,
-                                             0.20,  0.50,  1.00,     0.40,     0.40,
-                                             0.20,  0.20,  0.40,     1.00,     0.70,
-                                             0.20,  0.10,  0.40,     0.70,     1.00),
+             if (assume_perfect_GS == TRUE) {
+                 rho1 <- 0.00
+             } else { 
+                 rho1 <- 0.20
+             }
+             
+             Sigma_highly_varied <- matrix(c(1,     rho1,  rho1,     rho1,     rho1,
+                                             rho1,  1.00,  0.50,     0.20,     0.10,
+                                             rho1,  0.50,  1.00,     0.40,     0.40,
+                                             rho1,  0.20,  0.40,     1.00,     0.70,
+                                             rho1,  0.10,  0.40,     0.70,     1.00),
                                              nrow = n_tests, 
                                              ncol = n_tests)
         
@@ -319,29 +325,31 @@ simulate_binary_and_ordinal_MA_LC_MVP_data <- function(   n_studies = 10,
      
    }
    
-   
-   # Compute OVERALL observed TRUE Se:
-   for (t in 2:n_tests) {
-     n_thr <- n_total_obs_thr_per_test[t] 
-     for (k in 1:n_thr) {
-       Se_OVERALL_all_tests_all_thresholds[t, k] <- n_TP_at_current_threshold_OVERALL[t, k]/n_pos_OVERALL
-     }
-   }
-  
-   
-   # Compute OVERALL observed TRUE Fp / Sp:
-   for (t in 2:n_tests) {
-     n_thr <- n_total_obs_thr_per_test[t] 
-     for (k in 1:n_thr) {
-       Sp_OVERALL_all_tests_all_thresholds[t, k] <- 1.0 - (n_FP_at_current_threshold_OVERALL[t, k]/n_neg_OVERALL)
-     }
-   }
-   
-   
-   y_tibble <- NULL
-   y_tibble <- tibble(data.table::rbindlist(y_df_list, idcol = "Study"))
+
+       # # Compute OVERALL observed TRUE Se:
+       # for (t in 2:n_tests) {
+       #   n_thr <- n_total_obs_thr_per_test[t] 
+       #   for (k in 1:n_thr) {
+       #     Se_OVERALL_all_tests_all_thresholds[t, k] <- n_TP_at_current_threshold_OVERALL[t, k]/n_pos_OVERALL
+       #   }
+       # }
+       Se_OVERALL_all_tests_all_thresholds <-  mean_matrix <- Reduce(`+`, Se_per_study_all_tests_all_thresholds_list) / length(Se_per_study_all_tests_all_thresholds_list)
+      
+       
+       # Compute OVERALL observed TRUE Fp / Sp:
+       # for (t in 2:n_tests) {
+       #   n_thr <- n_total_obs_thr_per_test[t] 
+       #   for (k in 1:n_thr) {
+       #     Sp_OVERALL_all_tests_all_thresholds[t, k] <- 1.0 - (n_FP_at_current_threshold_OVERALL[t, k]/n_neg_OVERALL)
+       #   }
+       # }
+       Sp_OVERALL_all_tests_all_thresholds <-  mean_matrix <- Reduce(`+`, Sp_per_study_all_tests_all_thresholds_list) / length(Sp_per_study_all_tests_all_thresholds_list)
+       
+       y_tibble <- NULL
+       y_tibble <- tibble(data.table::rbindlist(y_df_list, idcol = "Study"))
    
    return(list(
+     N_per_study_vec = N_per_study_vec,
      y_list = y_list,
      y_df_list = y_df_list,
      y_tibble = y_tibble,

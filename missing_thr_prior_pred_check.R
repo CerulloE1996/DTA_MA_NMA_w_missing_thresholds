@@ -17,7 +17,9 @@ prior_kappa_sd <- 10
 
 
 induced_Dirichlet_ppc_plot <- function(  use_alpha_directly, 
+                                         use_log_alpha,
                                          log_alpha_lb,
+                                         log_alpha_ub,
                                          use_log_kappa, 
                                          prior_sd, 
                                          n_cat, 
@@ -27,27 +29,36 @@ induced_Dirichlet_ppc_plot <- function(  use_alpha_directly,
               
             message(paste("p_if_uniform = ", p_if_uniform))
      
-            if (use_alpha_directly == TRUE) {
-                if (use_log_kappa == TRUE) {
-                    log_kappa <- rnorm(n = N, mean = 0, sd = prior_sd)
-                    kappa <- exp(log_kappa)
-                } else { 
-                    kappa <- truncnorm::rtruncnorm(N, a = 0, mean =  0, sd = prior_sd)
-                }
+
+            if (use_log_kappa == TRUE) {
+              log_kappa <- rnorm(n = N, mean = 0, sd = prior_sd)
+              kappa <- exp(log_kappa)
+            } else { 
+              kappa <- truncnorm::rtruncnorm(N, a = 1, mean =  0, sd = prior_sd)
             }
             
             phi <- MCMCpack::rdirichlet(N, rep(1, n_cat)) 
             res <- array(NA_real_, dim = c(n_cat, N))
             
             for (i in 1:N) {
-              if (use_alpha_directly == TRUE) {
-                log_alpha <- truncnorm::rtruncnorm(n = n_cat, mean = 0.0, sd = prior_sd, a = log_alpha_lb)
-                alpha <- exp(log_alpha)
-              } else { 
-                alpha <- kappa[i]*phi[i,]
-              }
               
-              res[,i] <- MCMCpack::rdirichlet(1, alpha)
+                  if (use_alpha_directly == TRUE) {
+                    
+                     if (use_log_alpha == TRUE) {
+                           log_alpha <- truncnorm::rtruncnorm(n = n_cat, mean = 0.0, sd = prior_sd, a = log_alpha_lb, b = log_alpha_ub)
+                           alpha <- exp(log_alpha)
+                     } else { 
+                           alpha <- truncnorm::rtruncnorm(n = n_cat, mean = 0.0, sd = prior_sd, a = exp(log_alpha_lb), b = exp(log_alpha_ub))
+                     }
+                    
+                  } else { 
+                    
+                          alpha <- kappa[i]*phi[i,]
+                    
+                  }
+                  
+                  res[,i] <- MCMCpack::rdirichlet(1, alpha)
+                  
             }
             
             df <- data.frame(p1 = res[1,], p2 = res[2,], dist = 1) %>% filter(!is.na(p1), !is.na(p2))     
