@@ -25,20 +25,34 @@
 
 functions {
   
+      // //// Basic bounding function
+      // real fn_bound_10( real x ) { 
+      //                         
+      //        vector[2] container_bound_below;
+      //        container_bound_below[1] = -10.0;
+      //        container_bound_below[2] = x;
+      //        
+      //        vector[2] container_bound_above;
+      //        container_bound_above[1] = max(container_bound_below);
+      //        container_bound_above[2] = +10.0;
+      //        
+      //        return min(container_bound_above);
+      //  
+      // }
         
       //// Box-Cox transform function:
       real box_cox( real x, 
                     real lambda) {
             
-            if (lambda == 0) {
+            if (lambda == 0.0) {
                 return log(x);
             } else {
-                return (pow(x, lambda) - 1) / lambda;
+                return (pow(x, lambda) - 1.0) / lambda;
             }
           
       }
       
-      //// Vectorized version:
+      //// Vectorized Box-Cox transform function:
       vector box_cox( vector x, 
                       real lambda) {
                                
@@ -47,10 +61,10 @@ functions {
             
             for (n in 1:N) {
               
-                if (lambda == 0) {
+                if (lambda == 0.0) {
                      result[n] = log(x[n]); 
                 } else {
-                     result[n] = (pow(x[n], lambda) - 1) / lambda;
+                     result[n] = (pow(x[n], lambda) - 1.0) / lambda;
                 }
                 
             }
@@ -58,23 +72,6 @@ functions {
             return result;
           
       }
-      
-      // //// Log probability for Box-Cox normal model (useful for estimating optimal lambda):
-      // real box_cox_normal_lpdf( vector y, 
-      //                           real mu, 
-      //                           real sigma, 
-      //                           real lambda) {
-      //                             
-      //       int N = num_elements(y);
-      //       vector[N] transformed_y = box_cox(y, lambda);
-      //       
-      //       // Add Jacobian adjustment for transformation:
-      //       real log_jacobian = (lambda - 1) * sum(log(y));
-      //       
-      //       // Return log probability:
-      //       return normal_lpdf(transformed_y | mu, sigma) + log_jacobian;
-      //   
-      // }
         
   
 }
@@ -84,148 +81,143 @@ data {
   
       int<lower=1> n_studies;
       int<lower=1> n_thr;
-      vector<lower=0>[n_thr + 1] alpha_non_diseased; // Induced-Dirichlet prior vector 
-      vector<lower=0>[n_thr + 1] alpha_diseased; // Induced-Dirichlet prior vector 
-      array[n_studies] int<lower=1> n_non_diseased;  // number in non-diseased group in each study
-      array[n_studies] int<lower=1> n_diseased;  // number in diseased group in each study
-      array[n_studies, n_thr] int x_non_diseased;  // counts for non-diseased ("missing" threshold data recorded as 999)
-      array[n_studies, n_thr] int x_diseased;  // counts for diseased     ("missing" threshold data recorded as 999)
+      array[2, n_studies] int n_cutpoints;
+      array[2] matrix[n_studies, n_thr] x_with_missings;
+      array[2] matrix[n_studies, n_thr] n;
+      array[2] matrix[n_studies, n_thr] x;
+      array[2] matrix[n_studies, n_thr] cutpoint_index;
       vector[n_thr] cts_thr_values_nd; // = logit(cts_thr_values_nd);   // Global cutpoints 
       vector[n_thr] cts_thr_values_d; //  = logit(cts_thr_values_d);    // Global cutpoints
+      //// Priors:
+      vector[2] prior_beta_mu_mean;
+      vector[2] prior_beta_mu_SD;
+      vector[2] prior_beta_SD_mean;
+      vector[2] prior_beta_SD_SD;
+      vector[2] prior_log_scale_mu_mean;
+      vector[2] prior_log_scale_mu_SD;
+      vector[2] prior_log_scale_SD_mean;
+      vector[2] prior_log_scale_SD_SD;
+      //// Other:
+      int use_box_cox;
   
 }
 
+
 transformed data { 
-  
+    
         int n_cat = n_thr + 1; //// Number of ordinal categories for index test
-        matrix[n_studies, n_cat] x_inc_n_non_diseased; 
-        matrix[n_studies, n_cat] x_inc_n_diseased; 
-        
-        for (s in 1:n_studies) {
-        
-              x_inc_n_non_diseased[s, 1] = n_non_diseased[s];
-              x_inc_n_diseased[s, 1]     = n_diseased[s];
-              
-               for (k in 2:n_cat) {
-                  x_inc_n_non_diseased[s, k] = x_non_diseased[s, k - 1];
-                  x_inc_n_diseased[s, k]     = x_diseased[s, k - 1];
-               }
-             
-        }
-  
+   
 }
 
 
 parameters {
   
-      real beta_d_mu;
-      real beta_nd_mu; 
-      real log_scale_d_mu;
-      real log_scale_nd_mu;
-      real<lower=0> beta_d_SD;  
-      real<lower=0> beta_nd_SD;   
-      real<lower=0> log_scale_d_SD;
-      real<lower=0> log_scale_nd_SD;
-      vector[n_studies] beta_d_z;    // Study-specific random effects for beta (off-centered parameterisation)
-      vector[n_studies] beta_nd_z;    // Study-specific random effects for beta (off-centered parameterisation)
-      vector[n_studies] log_scale_d_z;    // Study-specific random effects for scale (off-centered parameterisation)
-      vector[n_studies] log_scale_nd_z;    // Study-specific random effects for scale (off-centered parameterisation)
-      //// box-cox params:
-      real<lower=-3.0,upper=3.0> lambda_nd;
-      real<lower=-3.0,upper=3.0> lambda_d;
+      vector[2] beta_mu;    
+      vector<lower=0.0>[2] beta_SD;   
+      array[2] vector[n_studies] beta_z;    // Study-specific random effects for beta (off-centered parameterisation)
+      ////
+      vector[2] log_scale_mu;    
+      vector<lower=0.0>[2] log_scale_SD;   
+      array[2] vector[n_studies] log_scale_z;    // Study-specific random effects for beta (off-centered parameterisation)
+      ////
+      vector<lower=-5.0, upper = 5.0>[2] lambda;   // box-cox params
   
 }
 
 
 transformed parameters { 
   
-      //// Construct the study-specific random effects (off-centered param.):
-      vector[n_studies] beta_nd =     beta_nd_mu      + beta_nd_z      .* beta_nd_SD; 
-      vector[n_studies] beta_d =      beta_d_mu       + beta_d_z       .* beta_d_SD;  
-      vector[n_studies] log_scale_nd = log_scale_nd_mu + log_scale_nd_z .* log_scale_nd_SD;  
-      vector[n_studies] log_scale_d  = log_scale_d_mu  + log_scale_d_z  .* log_scale_d_SD;  
-      vector[n_studies] scale_d  = exp(log_scale_d);
-      vector[n_studies] scale_nd = exp(log_scale_nd);
-      //// Cutpoints:
-      vector[n_thr] cutpoints_nd = box_cox(cts_thr_values_nd, lambda_nd);   // Global cutpoints 
-      vector[n_thr] cutpoints_d  = box_cox(cts_thr_values_d,  lambda_d);    // Global cutpoints
-      //// Cumulative ordinal probs for the likelihood:
-      matrix<lower=0.0>[n_studies, n_thr] cumul_cond_prob_nd = rep_matrix(0.0, n_studies, n_thr);
-      matrix<lower=0.0>[n_studies, n_thr] cumul_cond_prob_d  = rep_matrix(0.0, n_studies, n_thr);
+        //// Construct the study-specific random effects (off-centered param.):
+        array[2] vector[n_studies] beta;
+        array[2] vector[n_studies] log_scale;
+        array[2] vector[n_studies] scale;
+        array[2] vector[n_thr] cutpoints;  // Global cutpoints
+        ////
+        array[2] matrix[n_studies, n_thr] logit_cumul_prob; // Ordinal probs for the likelihood
+        array[2] matrix[n_studies, n_thr] cumul_prob; // Ordinal probs for the likelihood
+        array[2] matrix[n_studies, n_thr] cond_prob;  // Ordinal probs for the likelihood
+        array[2] matrix[n_studies, n_thr] log_lik;  // log_lik storage
       
-      
-              //// Likelihood using binomial factorization:
-        for (s in 1:n_studies) {
-                
-                //// Non-diseased group (fixed parameters)
-                if (x_non_diseased[s, 1] != 999) { //// If non-missing (i.e. only if study reports @ this ordinal cutpoint!)
-                         cumul_cond_prob_nd[s, 1] = inv_logit((beta_nd[s] - cutpoints_nd[1])/scale_nd[s]);
-                }
-                
-                for (k in 2:n_thr) {
-                     if (x_non_diseased[s, k] != 999) { //// If non-missing (i.e. only if study reports @ this ordinal cutpoint!)
-                         cumul_cond_prob_nd[s, k] = inv_logit((beta_nd[s] - cutpoints_nd[k])/scale_nd[s]) / inv_logit((beta_nd[s] - cutpoints_nd[k - 1])/scale_nd[s]);
-                     }
-                }
-                
-                //// Diseased group (D+):
-                if (x_diseased[s, 1] != 999) { //// If non-missing (i.e. only if study reports @ this ordinal cutpoint!)
-                         cumul_cond_prob_d[s, 1] = inv_logit((beta_d[s] - cutpoints_d[1])/scale_d[s]);
-                }
-                
-                for (k in 2:n_thr) {
-                   if (x_diseased[s, k] != 999) { //// If non-missing (i.e. only if study reports @ this ordinal cutpoint!)
-                         cumul_cond_prob_d[s, k] = inv_logit((beta_d[s] - cutpoints_d[k])/scale_d[s]) /  inv_logit((beta_d[s] - cutpoints_d[k - 1])/scale_d[s]);
-                   }
-                }
-          
+        //// Initialise matrices:
+        for (c in 1:2) {
+                 logit_cumul_prob[c] = rep_matrix(1.0, n_studies, n_thr);
+                 cumul_prob[c]       = rep_matrix(1.0, n_studies, n_thr);
+                 cond_prob[c]        = rep_matrix(1.0, n_studies, n_thr);
+                 log_lik[c]          = rep_matrix(0.0, n_studies, n_thr);
         }
+      
+        if (use_box_cox == 0) {
+              cutpoints[1]  = log(cts_thr_values_nd);
+              cutpoints[2]  = log(cts_thr_values_d);
+        } else { 
+              cutpoints[1]  = box_cox(cts_thr_values_nd, lambda[1]);
+              cutpoints[2]  = box_cox(cts_thr_values_d,  lambda[2]);
+        }
+        
+        for (c in 1:2) {
+            beta[c]  = to_vector(beta_mu[c] + beta_z[c] * beta_SD[c]);
+            log_scale[c] = to_vector(log_scale_mu[c] + log_scale_z[c] * log_scale_SD[c]);
+            scale[c] = exp(log_scale[c]);
+        }
+       
+        //// Likelihood using binomial factorization:
+        for (s in 1:n_studies) {
+                    for (c in 1:2) {
+                            for (cut_i in 1:to_int(n_cutpoints[c, s])) {
+                                        int k = to_int(cutpoint_index[c][s, cut_i]);
+                                        logit_cumul_prob[c][s, cut_i] = (beta[c][s] - cutpoints[c][k])/scale[c][s];
+                            }
+                    }
+        }
+        //// Calculate CUMULATIVE probabilities (vectorised):
+        for (c in 1:2) {
+            cumul_prob[c] = inv_logit(logit_cumul_prob[c]);
+        }
+        for (s in 1:n_studies) {
+                    for (c in 1:2) {
+                            real previous_cumul_prob_temp = 1.0;
+                            for (cut_i in 1:to_int(n_cutpoints[c, s])) {
+                              
+                                    real cumul_prob_temp = cumul_prob[c][s, cut_i];
+                                    cond_prob[c][s, cut_i] = cumul_prob_temp / previous_cumul_prob_temp;
+                                    if (cut_i == 1) { //// First non-missing cutpoint
+                                         int success_prob = to_int(n[c][s, 1]);
+                                         int x_i = to_int(x[c][s, 1]);
+                                         log_lik[c][s, cutpoint_counter] = binomial_lpmf( x_i | success_prob, cond_prob[c][s, 1] );
+                                    } else if (cut_i > 1) { 
+                                         int success_prob = to_int(n[c][s, cut_i]);
+                                         int x_i = to_int(x[c][s, cut_i]);
+                                         log_lik[c][s, cut_i] = binomial_lpmf( x_i | success_prob,  cond_prob[c][s, cut_i] );
+                                    }
+                                    previous_cumul_prob_temp = cumul_prob_temp;
+                          
+                            }
+                    }
+         }
       
 }
 
 
 model {
       
-      //// Between-study heterogenity priors:
-      target += normal_lpdf(beta_d_mu      | 0.0, 2.00);
-      target += normal_lpdf(beta_d_SD      | 0.0, 1.00);
-      target += std_normal_lpdf(beta_d_z);
-      target += normal_lpdf(log_scale_d_mu | 0.0, 1.00);
-      target += normal_lpdf(log_scale_d_SD | 0.0, 0.50);
-      target += std_normal_lpdf(log_scale_d_z);
-      
-      //// For non-diseased group only: 
-      target += normal_lpdf( beta_nd_mu     | 0.0, 2.00);
-      target += normal_lpdf( beta_nd_SD     | 0.0, 1.00);
-      target += std_normal_lpdf( beta_nd_z);
-      target += normal_lpdf(log_scale_nd_mu | 0.0, 1.00);
-      target += normal_lpdf(log_scale_nd_SD | 0.0, 0.50);
-      target += std_normal_lpdf(log_scale_nd_z);
-      
-      target +=  normal_lpdf(lambda_nd | 0.0, 1.0);
-      target +=  normal_lpdf(lambda_d  | 0.0, 1.0);
-                  
-      //// Likelihood using binomial factorization:
+        //// Priors:
+        beta_mu ~ normal(prior_beta_mu_mean, prior_beta_mu_SD);
+        beta_SD ~ normal(prior_beta_SD_mean, prior_beta_SD_SD);
+        log_scale_mu ~ normal(prior_log_scale_mu_mean, prior_log_scale_mu_SD);
+        log_scale_SD ~ normal(prior_log_scale_SD_mean, prior_log_scale_SD_SD);
+        
+        //// Likelihood / Model:
+        for (c in 1:2) {
+             to_vector(beta_z[c]) ~ std_normal(); // (part of between-study model, NOT prior)
+             to_vector(log_scale_z[c]) ~ std_normal(); // (part of between-study model, NOT prior)
+        }
+        
+        //// For box-cox parameters:
+        target +=  normal_lpdf(lambda | 0.00, 0.50);
+                    
         //// Likelihood using binomial factorization:
-        for (s in 1:n_studies) {
-                
-                for (k in 2:n_cat) {
-                  
-                       //// Non-diseased group (D+):
-                       int x_nd = to_int(x_inc_n_non_diseased[s, k]);
-                       int x_nd_previous = to_int(x_inc_n_non_diseased[s, k - 1]);
-                       if (x_nd != 999) { //// If non-missing (i.e. only if study reports @ this ordinal cutpoint!)
-                             target += binomial_lpmf( x_nd | x_nd_previous, cumul_cond_prob_nd[s, k - 1] );
-                       }
-                       //// Diseased group (D+):
-                       int x_d = to_int(x_inc_n_diseased[s, k]);
-                       int x_d_previous = to_int(x_inc_n_diseased[s, k - 1]);
-                       if (x_d != 999) { //// If non-missing (i.e. only if study reports @ this ordinal cutpoint!)
-                             target += binomial_lpmf( x_d | x_d_previous, cumul_cond_prob_d[s, k - 1] );
-                       }
-                   
-                }
-          
+        for (c in 1:2) {
+          target +=  sum(log_lik[c]);
         }
   
 }
@@ -233,69 +225,71 @@ model {
 
 generated quantities {
   
-        //// Summary accuracy parameters (at each threshold):
-        vector[n_thr] Se;
-        vector[n_thr] Sp;
-        vector[n_thr] Se_pred;
-        vector[n_thr] Sp_pred;
-        array[n_studies] vector[n_thr] se;
-        array[n_studies] vector[n_thr] sp;
-        matrix[n_studies, n_thr] x_non_diseased_est =  rep_matrix(0.0, n_studies, n_thr);
-        matrix[n_studies, n_thr] x_diseased_est =      rep_matrix(0.0, n_studies, n_thr);
-        matrix[n_studies, n_thr] x_non_diseased_diff = rep_matrix(0.0, n_studies, n_thr);
-        matrix[n_studies, n_thr] x_diseased_diff =     rep_matrix(0.0, n_studies, n_thr);
-        
-        //// Calculate study-specific accuracy:
-        for (s in 1:n_studies) {
-              for (k in 1:n_thr) {
-                  se[s, k] =        inv_logit((cutpoints_d[k]      - beta_d[s]) /scale_d[s]);
-                  sp[s, k] =  1.0 - inv_logit((cutpoints_nd[k]     - beta_nd[s])/scale_nd[s]);
-              }
-        }
-        
-        //// Calculate summary accuracy (using mean parameters):
-        for (k in 1:n_thr) {
-            Se[k] =         inv_logit((cutpoints_d[k]     - beta_d_mu) /exp(log_scale_d_mu));
-            Sp[k] =  1.0 -  inv_logit((cutpoints_nd[k]    - beta_nd_mu)/exp(log_scale_d_mu));
-        }
-        
-        //// Calculate predictive accuracy:
-        {
-            real beta_d_pred  = normal_rng(beta_d_mu, beta_d_SD);
-            real scale_d_pred = exp(normal_rng(log_scale_d_mu, log_scale_d_SD));
-            //// For non-diseased group only: 
-            real beta_nd_pred  = normal_rng(beta_nd_mu, beta_nd_SD);
-            real scale_nd_pred = exp(normal_rng(log_scale_nd_mu, log_scale_nd_SD));
-            
-            for (k in 1:n_thr) {
-                Se_pred[k] =        inv_logit((cutpoints_d[k]     - beta_d_pred) /scale_d_pred);
-                Sp_pred[k] =  1.0 - inv_logit((cutpoints_nd[k]    - beta_nd_pred)/scale_nd_pred);
-            }
-        }
-        
-                  //// Model-predicted ("re-constructed") data:
+          //// Summary accuracy parameters (at each threshold):
+          vector[n_thr] Se;
+          vector[n_thr] Sp;
+          vector[n_thr] Fp;
+          vector[n_thr] Se_pred;
+          vector[n_thr] Sp_pred;
+          vector[n_thr] Fp_pred;
+          array[n_studies] vector[n_thr] se;
+          array[n_studies] vector[n_thr] sp;
+          array[n_studies] vector[n_thr] fp;
+          matrix[n_studies, n_thr] x_hat_nd = rep_matrix(-1, n_studies, n_thr);
+          matrix[n_studies, n_thr] x_hat_d  = rep_matrix(-1, n_studies, n_thr);
+          matrix[n_studies, n_thr] dev_nd   = rep_matrix(-1, n_studies, n_thr);
+          matrix[n_studies, n_thr] dev_d    = rep_matrix(-1, n_studies, n_thr);
+          array[2] matrix[n_studies, n_thr] x_hat;
+          array[2] matrix[n_studies, n_thr] dev;
+          
+          //// Initialise containers:
+          for (c in 1:2) {
+              x_hat[c]  = rep_matrix(-1, n_studies, n_thr);
+              dev[c]   = rep_matrix(-1, n_studies, n_thr);
+          }
+              
+          //// Calculate study-specific accuracy:
           for (s in 1:n_studies) {
-  
-                    for (k in 2:n_cat) {
-  
-                           //// Non-diseased group (D+):
-                           int x_nd =          to_int(x_inc_n_non_diseased[s, k]);
-                           int x_nd_previous = to_int(x_inc_n_non_diseased[s, k - 1]);
-                           if (x_nd != 999) { //// If non-missing (i.e. only if study reports @ this ordinal cutpoint!)
-                                   x_non_diseased_est[s, k - 1]  = binomial_rng( x_nd_previous, cumul_cond_prob_nd[s, k - 1] );
-                                   x_non_diseased_diff[s, k - 1] = abs( x_non_diseased_est[s, k - 1] - x_nd );
-                           }
-                           //// Diseased group (D+):
-                           int x_d =          to_int(x_inc_n_diseased[s, k]);
-                           int x_d_previous = to_int(x_inc_n_diseased[s, k - 1]);
-                           if (x_d != 999) { //// If non-missing (i.e. only if study reports @ this ordinal cutpoint!)
-                                  x_diseased_est[s, k - 1]  = binomial_rng( x_d_previous, cumul_cond_prob_d[s, k - 1] );
-                                  x_diseased_diff[s, k - 1] = abs( x_diseased_est[s, k - 1] - x_d );
-                           }
-  
-                    }
-  
-        }
+             for (k in 1:n_thr) {
+                    fp[s, k] =   inv_logit((beta[1][s] - cutpoints[1][k])/scale[1][s]);
+                    sp[s, k] =   1.0 - fp[s, k];
+                    se[s, k] =   inv_logit((beta[2][s] - cutpoints[2][k])/scale[2][s]);
+                }
+          }
+          
+          //// Calculate summary accuracy (using mean parameters):
+          for (k in 1:n_thr) {
+                Fp[k] =   inv_logit((beta_mu[1] - cutpoints[1][k])/exp(log_scale_mu[1]));
+                Sp[k] =   1.0 - Fp[k];
+                Se[k] =   inv_logit((beta_mu[2] - cutpoints[2][k])/exp(log_scale_mu[2]));
+          }
+          
+          //// Model-predicted ("re-constructed") data:
+         for (s in 1:n_studies) {
+             for (c in 1:2) {
+                for (cut_i in 1:to_int(n_cutpoints[c, s])) {
+                  
+                      //// Model-estimated data:
+                      x_hat[c][s, cut_i] = cond_prob[c][s, cut_i] * n[c][s, cut_i];  	 // Fitted values
+                    
+                      //// Compute residual deviance contribution:
+                      real n_i =  (n[c][s, cut_i]);
+                      real x_i =  (x[c][s, cut_i]);
+                      real x_hat_i =  (x_hat[c][s, cut_i]);
+                      real log_x_minus_log_x_hat = log(x_i) - log(x_hat_i);
+                      real log_diff_n_minus_x = log(n_i - x_i);
+                      real log_diff_n_minus_x_hat = log(abs(n_i - x_hat_i));
+                       
+                      dev[c][s, cut_i] = 2.0 * ( x_i * log_x_minus_log_x_hat + (n_i - x_i) * (log_diff_n_minus_x - log_diff_n_minus_x_hat) ); 
+                      
+                }
+             }
+         }
+         
+         x_hat_nd = x_hat[1];
+         dev_nd = dev[1];
+         x_hat_d = x_hat[2];
+         dev_d = dev[2];
     
 }
 
