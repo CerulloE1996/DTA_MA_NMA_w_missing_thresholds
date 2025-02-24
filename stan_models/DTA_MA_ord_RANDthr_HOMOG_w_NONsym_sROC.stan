@@ -181,7 +181,10 @@ parameters {
         real<lower=0.0> log_scale_d_SD;   
         vector[n_studies] log_scale_d_z;    // Study-specific random effects for beta (off-centered parameterisation)
         array[n_studies] ordered[n_thr] cutpoints;  // Global cutpoints
-        vector<lower=log_alpha_lb, upper=log_alpha_ub>[n_cat] log_alpha; // Forces the ind_Dirichlet "alpha" to be >= 1
+        // vector<lower=log_alpha_lb, upper=log_alpha_ub>[n_cat] log_alpha; // Forces the ind_Dirichlet "alpha" to be >= 1
+        vector<lower=exp(log_alpha_lb), upper=exp(log_alpha_ub)>[n_cat] alpha; // Forces the ind_Dirichlet "alpha" to be >= 1
+        // simplex[n_cat] phi;
+        // real<lower=1.0> kappa;
   
 }
 
@@ -194,7 +197,7 @@ transformed parameters {
         matrix[2, n_studies] log_scale_z;    // Study-specific random effects for beta (off-centered parameterisation)
         matrix[2, n_studies] log_scale;
         matrix[2, n_studies] scale;
-        vector[n_cat] alpha; // For Induced-Dirichlet * heirarchical * cutpoint model
+        // vector[n_cat] alpha; // For Induced-Dirichlet * heirarchical * cutpoint model
         ////
         array[2] matrix[n_studies, n_thr] logit_cumul_prob; // Ordinal probs for the likelihood
         array[2] matrix[n_studies, n_thr] cumul_prob; // Ordinal probs for the likelihood
@@ -236,7 +239,8 @@ transformed parameters {
             }
         }
         
-        alpha = exp(log_alpha);
+        // // alpha = exp(log_alpha);
+        // alpha[1:n_cat] = to_row_vector(phi[1:n_cat] * kappa);
         
         //// Likelihood using binomial factorization:
         for (s in 1:n_studies) {
@@ -284,9 +288,11 @@ model {
         log_scale_d_mu ~ normal(prior_log_scale_mu_mean[2], prior_log_scale_mu_SD[2]);
         log_scale_d_SD ~ normal(prior_log_scale_SD_mean[2], prior_log_scale_SD_SD[2]);
         
-        //// Induced-Dirichlet MODEL for cutpoints
-        log_alpha ~ normal(prior_kappa_mean[1], prior_kappa_SD[1]);
-    
+        // //// Induced-Dirichlet MODEL for cutpoints
+        // // log_alpha ~ normal(prior_kappa_mean[1], prior_kappa_SD[1]);
+        // kappa ~ normal(prior_kappa_mean[1], prior_kappa_SD[1]);
+        alpha ~ normal(prior_kappa_mean[1], prior_kappa_SD[1]);
+     
         //// Likelihood / Model:
         to_vector(log_scale_d_z)  ~ std_normal(); // (part of between-study model, NOT prior)
         to_vector(beta_z) ~ std_normal(); // (part of between-study model, NOT prior)
@@ -297,7 +303,7 @@ model {
         }
        
         //// Jacobian adjustments needed:
-        target += sum(log_alpha);                    // double-checked the log-derivative of this by hand (correct)
+        // target += sum(log_alpha);                    // double-checked the log-derivative of this by hand (correct)
         if (estimate_scales == 1) { 
             target += sum(log_scale);                // double-checked the log-derivative of this by hand (correct)
             if (abs(log_scale_d_SD) != 0.0) {  // just in case inits are set to exactly zero (sampler will otherwise fail)

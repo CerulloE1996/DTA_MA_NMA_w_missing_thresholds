@@ -114,11 +114,11 @@ parameters {
   
       vector[2] beta_mu;    
       vector<lower=0.0>[2] beta_SD;   
-      array[2] vector[n_studies] beta_z;    // Study-specific random effects for beta (off-centered parameterisation)
+      matrix[2, n_studies] beta_z;    // Study-specific random effects for beta (off-centered parameterisation)
       ////
       vector[2] log_scale_mu;    
       vector<lower=0.0>[2] log_scale_SD;   
-      array[2] vector[n_studies] log_scale_z;    // Study-specific random effects for beta (off-centered parameterisation)
+      matrix[2, n_studies] log_scale_z;    // Study-specific random effects for beta (off-centered parameterisation)
       ////
       vector<lower=-5.0, upper = 5.0>[2] lambda;   // box-cox params
   
@@ -128,10 +128,10 @@ parameters {
 transformed parameters { 
   
         //// Construct the study-specific random effects (off-centered param.):
-        array[2] vector[n_studies] beta;
-        array[2] vector[n_studies] log_scale;
-        array[2] vector[n_studies] scale;
-        array[2] vector[n_thr] cutpoints;  // Global cutpoints
+        matrix[2, n_studies] beta;
+        matrix[2, n_studies] log_scale;
+        matrix[2, n_studies] scale;
+        matrix[2, n_thr] cutpoints;  // Global cutpoints
         ////
         array[2] matrix[n_studies, n_thr] logit_cumul_prob; // Ordinal probs for the likelihood
         array[2] matrix[n_studies, n_thr] cumul_prob; // Ordinal probs for the likelihood
@@ -147,25 +147,25 @@ transformed parameters {
         }
       
         if (use_box_cox == 0) {
-              cutpoints[1]  = log(cts_thr_values_nd);
-              cutpoints[2]  = log(cts_thr_values_d);
+              cutpoints[1, ]  = to_row_vector(log(cts_thr_values_nd));
+              cutpoints[2, ]  = to_row_vector(log(cts_thr_values_d));
         } else { 
-              cutpoints[1]  = box_cox(cts_thr_values_nd, lambda[1]);
-              cutpoints[2]  = box_cox(cts_thr_values_d,  lambda[2]);
+              cutpoints[1, ]  = to_row_vector(box_cox(cts_thr_values_nd, lambda[1]));
+              cutpoints[2, ]  = to_row_vector(box_cox(cts_thr_values_d,  lambda[2]));
         }
         
         for (c in 1:2) {
-            beta[c]  = to_vector(beta_mu[c] + beta_z[c] * beta_SD[c]);
-            log_scale[c] = to_vector(log_scale_mu[c] + log_scale_z[c] * log_scale_SD[c]);
-            scale[c] = exp(log_scale[c]);
+            beta[c, ]  = to_row_vector(beta_mu[c] + beta_z[c, ] * beta_SD[c]);
+            log_scale[c, ] = to_row_vector(log_scale_mu[c] + log_scale_z[c, ] * log_scale_SD[c]);
+            scale[c, ] = exp(log_scale[c, ]);
         }
        
         //// Likelihood using binomial factorization:
         for (s in 1:n_studies) {
                     for (c in 1:2) {
                             for (cut_i in 1:to_int(n_cutpoints[c, s])) {
-                                        int k = to_int(cutpoint_index[c][s, cut_i]);
-                                        logit_cumul_prob[c][s, cut_i] = (beta[c][s] - cutpoints[c][k])/scale[c][s];
+                                    int k = to_int(cutpoint_index[c][s, cut_i]);
+                                    logit_cumul_prob[c][s, cut_i] = (beta[c, s] - cutpoints[c, k])/scale[c, s];
                             }
                     }
         }
@@ -175,23 +175,23 @@ transformed parameters {
         }
         for (s in 1:n_studies) {
                     for (c in 1:2) {
-                            real previous_cumul_prob_temp = 1.0;
-                            for (cut_i in 1:to_int(n_cutpoints[c, s])) {
-                              
-                                    real cumul_prob_temp = cumul_prob[c][s, cut_i];
-                                    cond_prob[c][s, cut_i] = cumul_prob_temp / previous_cumul_prob_temp;
-                                    if (cut_i == 1) { //// First non-missing cutpoint
-                                         int success_prob = to_int(n[c][s, 1]);
-                                         int x_i = to_int(x[c][s, 1]);
-                                         log_lik[c][s, cut_i] = binomial_lpmf( x_i | success_prob, cond_prob[c][s, 1] );
-                                    } else if (cut_i > 1) { 
-                                         int success_prob = to_int(n[c][s, cut_i]);
-                                         int x_i = to_int(x[c][s, cut_i]);
-                                         log_lik[c][s, cut_i] = binomial_lpmf( x_i | success_prob,  cond_prob[c][s, cut_i] );
-                                    }
-                                    previous_cumul_prob_temp = cumul_prob_temp;
-                          
-                            }
+                          real previous_cumul_prob_temp = 1.0;
+                          for (cut_i in 1:to_int(n_cutpoints[c, s])) {
+                            
+                                  real cumul_prob_temp = cumul_prob[c][s, cut_i];
+                                  cond_prob[c][s, cut_i] = cumul_prob_temp / previous_cumul_prob_temp;
+                                  if (cut_i == 1) { //// First non-missing cutpoint
+                                       int success_prob = to_int(n[c][s, 1]);
+                                       int x_i = to_int(x[c][s, 1]);
+                                       log_lik[c][s, cut_i] = binomial_lpmf( x_i | success_prob, cond_prob[c][s, 1] );
+                                  } else if (cut_i > 1) { 
+                                       int success_prob = to_int(n[c][s, cut_i]);
+                                       int x_i = to_int(x[c][s, cut_i]);
+                                       log_lik[c][s, cut_i] = binomial_lpmf( x_i | success_prob,  cond_prob[c][s, cut_i] );
+                                  }
+                                  previous_cumul_prob_temp = cumul_prob_temp;
+                        
+                          }
                     }
          }
       
@@ -208,21 +208,21 @@ model {
         
         //// Likelihood / Model:
         for (c in 1:2) {
-             to_vector(beta_z[c]) ~ std_normal(); // (part of between-study model, NOT prior)
-             to_vector(log_scale_z[c]) ~ std_normal(); // (part of between-study model, NOT prior)
+             to_vector(beta_z[c, ]) ~ std_normal(); // (part of between-study model, NOT prior)
+             to_vector(log_scale_z[c, ]) ~ std_normal(); // (part of between-study model, NOT prior)
         }
         
         //// For box-cox parameters:
         target +=  normal_lpdf(lambda | 0.00, 0.50);
         
         //// Jacobian adjustments needed:
-        if (estimate_scales == 1) { 
+        { 
             target += sum(log_scale);                // double-checked the log-derivative of this by hand (correct)
-            if (abs(log_scale_d_SD) != 0.0) {  // just in case inits are set to exactly zero (sampler will otherwise fail)
-                 target += log(abs(log_scale_d_SD));      // double-checked the log-derivative of this by hand (correct)
+            if (abs(sum(log_scale_SD)) != 0.0) {  // just in case inits are set to exactly zero (sampler will otherwise fail)
+                 target += log(abs(sum(log_scale_SD)));      // double-checked the log-derivative of this by hand (correct)
             } 
-            if (abs(sum(log_scale_d_z)) != 0.0) {  // just in case inits are set to exactly zero (sampler will otherwise fail)
-                 target += log(abs(sum(log_scale_d_z)));  // double-checked the log-derivative of this by hand (correct)
+            if (abs(sum(log_scale_z)) != 0.0) {  // just in case inits are set to exactly zero (sampler will otherwise fail)
+                 target += log(abs(sum(log_scale_z)));  // double-checked the log-derivative of this by hand (correct)
             }
         }
                     
@@ -256,15 +256,15 @@ generated quantities {
           //// Initialise containers:
           for (c in 1:2) {
               x_hat[c]  = rep_matrix(-1, n_studies, n_thr);
-              dev[c]   = rep_matrix(-1, n_studies, n_thr);
+              dev[c]    = rep_matrix(-1, n_studies, n_thr);
           }
               
           //// Calculate study-specific accuracy:
           for (s in 1:n_studies) {
              for (k in 1:n_thr) {
-                    fp[s, k] =   inv_logit((beta[1][s] - cutpoints[1][k])/scale[1][s]);
+                    fp[s, k] =   inv_logit((beta[1, s] - cutpoints[1][k])/scale[1, s]);
                     sp[s, k] =   1.0 - fp[s, k];
-                    se[s, k] =   inv_logit((beta[2][s] - cutpoints[2][k])/scale[2][s]);
+                    se[s, k] =   inv_logit((beta[2, s] - cutpoints[2][k])/scale[2, s]);
                 }
           }
           
