@@ -171,7 +171,7 @@ transformed parameters {
         }
         //// Calculate CUMULATIVE probabilities (vectorised):
         for (c in 1:2) {
-            cumul_prob[c] = inv_logit(logit_cumul_prob[c]);
+            cumul_prob[c] = Phi_approx(logit_cumul_prob[c]);
         }
         for (s in 1:n_studies) {
                     for (c in 1:2) {
@@ -262,17 +262,17 @@ generated quantities {
           //// Calculate study-specific accuracy:
           for (s in 1:n_studies) {
              for (k in 1:n_thr) {
-                    fp[s, k] =   inv_logit((beta[1, s] - cutpoints[1][k])/scale[1, s]);
+                    fp[s, k] =   Phi_approx((beta[1, s] - cutpoints[1][k])/scale[1, s]);
                     sp[s, k] =   1.0 - fp[s, k];
-                    se[s, k] =   inv_logit((beta[2, s] - cutpoints[2][k])/scale[2, s]);
+                    se[s, k] =   Phi_approx((beta[2, s] - cutpoints[2][k])/scale[2, s]);
                 }
           }
           
           //// Calculate summary accuracy (using mean parameters):
           for (k in 1:n_thr) {
-                Fp[k] =   inv_logit((beta_mu[1] - cutpoints[1][k])/exp(log_scale_mu[1]));
+                Fp[k] =   Phi_approx((beta_mu[1] - cutpoints[1][k])/exp(log_scale_mu[1]));
                 Sp[k] =   1.0 - Fp[k];
-                Se[k] =   inv_logit((beta_mu[2] - cutpoints[2][k])/exp(log_scale_mu[2]));
+                Se[k] =   Phi_approx((beta_mu[2] - cutpoints[2][k])/exp(log_scale_mu[2]));
           }
           
           //// Model-predicted ("re-constructed") data:
