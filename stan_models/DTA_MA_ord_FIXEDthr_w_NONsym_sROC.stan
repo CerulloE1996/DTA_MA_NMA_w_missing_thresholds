@@ -289,8 +289,20 @@ model {
           index_1 = 1;
         }
         for (c in 1:index_1) {
-              target += induced_dirichlet_w_logit_lpdf(to_vector(cutpoints[c])  | to_vector(prior_alpha), 0.0);
+              target += induced_dirichlet_w_logit_lpdf(to_vector(cutpoints[c]) | to_vector(prior_alpha), 0.0);
         }
+        
+        //// Jacobian adjustments needed:
+        if (estimate_scales == 1) { 
+            target += sum(log_scale);                // double-checked the log-derivative of this by hand (correct)
+            if (abs(log_scale_d_SD) != 0.0) {  // just in case inits are set to exactly zero (sampler will otherwise fail)
+                 target += log(abs(log_scale_d_SD));      // double-checked the log-derivative of this by hand (correct)
+            } 
+            if (abs(sum(log_scale_d_z)) != 0.0) {  // just in case inits are set to exactly zero (sampler will otherwise fail)
+                 target += log(abs(sum(log_scale_d_z)));  // double-checked the log-derivative of this by hand (correct)
+            }
+        }
+        
         //// Likelihood using binomial factorization:
         if (prior_only == 0) {
             for (c in 1:2) {

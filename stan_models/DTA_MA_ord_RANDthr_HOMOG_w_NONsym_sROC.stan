@@ -180,9 +180,8 @@ parameters {
         real log_scale_d_mu;    
         real<lower=0.0> log_scale_d_SD;   
         vector[n_studies] log_scale_d_z;    // Study-specific random effects for beta (off-centered parameterisation)
-        array[n_studies] ordered[n_thr] cutpoints_nd;  // Global cutpoints
-        array[n_studies] ordered[n_thr] cutpoints_d;   // Global cutpoints
-        matrix<lower=log_alpha_lb, upper=log_alpha_ub>[2, n_cat] log_alpha; // Forces the ind_Dirichlet "alpha" to be >= 1
+        array[n_studies] ordered[n_thr] cutpoints;  // Global cutpoints
+        vector<lower=log_alpha_lb, upper=log_alpha_ub>[n_cat] log_alpha; // Forces the ind_Dirichlet "alpha" to be >= 1
   
 }
 
@@ -195,7 +194,7 @@ transformed parameters {
         matrix[2, n_studies] log_scale_z;    // Study-specific random effects for beta (off-centered parameterisation)
         matrix[2, n_studies] log_scale;
         matrix[2, n_studies] scale;
-        matrix[2, n_cat] alpha; // For Induced-Dirichlet model
+        vector[n_cat] alpha; // For Induced-Dirichlet * heirarchical * cutpoint model
         ////
         array[2] matrix[n_studies, n_thr] logit_cumul_prob; // Ordinal probs for the likelihood
         array[2] matrix[n_studies, n_thr] cumul_prob; // Ordinal probs for the likelihood
@@ -219,7 +218,7 @@ transformed parameters {
         if (estimate_scales == 1) { 
               log_scale_mu[2] = log_scale_d_mu;
               log_scale_SD[2] = log_scale_d_SD;
-              log_scale_z[2, 1:n_studies] = to_row_vector(log_scale_d_z);
+              log_scale_z[2, 1:n_studies]  = to_row_vector(log_scale_d_z);
         } else { 
               log_scale_mu[2] = 0.0;
               log_scale_SD[2] = 0.0;
@@ -227,26 +226,24 @@ transformed parameters {
         }
         
         for (c in 1:2) {
-            beta[c, 1:n_studies]  = to_row_vector(beta_mu[c] + beta_z[c, 1:n_studies] * beta_SD[c]);
+            beta[c, 1:n_studies]  = to_row_vector(beta_mu[c] + beta_z[c] * beta_SD[c]);
             if (estimate_scales == 1) { 
-                log_scale[c, 1:n_studies] = to_row_vector(log_scale_mu[c] + log_scale_z[c, 1:n_studies] * log_scale_SD[c]);
-                scale[c, 1:n_studies] = exp(log_scale[c, 1:n_studies]);
+                log_scale[c, 1:n_studies] = to_row_vector(log_scale_mu[c] + log_scale_z[c] * log_scale_SD[c]);
+                scale[c, 1:n_studies] = exp(log_scale[c]);
             } else {
                 log_scale[c, 1:n_studies] = rep_row_vector(0.0, n_studies);
                 scale[c, 1:n_studies]     = rep_row_vector(1.0, n_studies);
             }
-            alpha[c, 1:n_cat] = exp(log_alpha[c, 1:n_cat]);
         }
+        
+        alpha = exp(log_alpha);
+        
         //// Likelihood using binomial factorization:
         for (s in 1:n_studies) {
                   for (c in 1:2) {
                         for (cut_i in 1:to_int(n_cutpoints[c, s])) {
                                 int k = to_int(cutpoint_index[c][s, cut_i]);
-                                if (c == 1) {
-                                     logit_cumul_prob[c][s, cut_i] = (beta[c, s] - cutpoints_nd[s][k]) / scale[c, s];
-                                } else if (c == 2) {
-                                     logit_cumul_prob[c][s, cut_i] = (beta[c, s] - cutpoints_d[s][k])  / scale[c, s];
-                                }
+                                logit_cumul_prob[c][s, cut_i] = (beta[c, s] - cutpoints[s][k]) / scale[c, s];
                         }
                   }
         }
@@ -287,20 +284,18 @@ model {
         log_scale_d_mu ~ normal(prior_log_scale_mu_mean[2], prior_log_scale_mu_SD[2]);
         log_scale_d_SD ~ normal(prior_log_scale_SD_mean[2], prior_log_scale_SD_SD[2]);
         
-        //// Induced-Dirichlet MODEL for cutpoints 
-        log_alpha[1, ] ~ normal(prior_kappa_mean[1], prior_kappa_SD[1]);
-        log_alpha[2, ] ~ normal(prior_kappa_mean[2], prior_kappa_SD[2]);
-      
+        //// Induced-Dirichlet MODEL for cutpoints
+        log_alpha ~ normal(prior_kappa_mean[1], prior_kappa_SD[1]);
+    
         //// Likelihood / Model:
         to_vector(log_scale_d_z)  ~ std_normal(); // (part of between-study model, NOT prior)
-        to_vector(beta_z) ~ std_normal();         // (part of between-study model, NOT prior)
-       
+        to_vector(beta_z) ~ std_normal(); // (part of between-study model, NOT prior)
+        
         //// Induced-dirichlet between study ** model ** (NOT a prior model here but part of the actual likelihood since random-effect cutpoints!):
         for (s in 1:n_studies) {
-            target += induced_dirichlet_w_probit_lpdf(to_vector(cutpoints_nd[s][1:n_thr])  | to_vector(alpha[1, 1:n_cat]), 0.0);
-            target += induced_dirichlet_w_probit_lpdf(to_vector(cutpoints_d[s][1:n_thr])   | to_vector(alpha[2, 1:n_cat]), 0.0);
+            target += induced_dirichlet_w_probit_lpdf( to_vector(cutpoints[s][1:n_thr]) | to_vector(alpha), 0.0);
         }
-        
+       
         //// Jacobian adjustments needed:
         target += sum(log_alpha);                    // double-checked the log-derivative of this by hand (correct)
         if (estimate_scales == 1) { 
@@ -312,7 +307,7 @@ model {
                  target += log(abs(sum(log_scale_d_z)));  // double-checked the log-derivative of this by hand (correct)
             }
         }
-      
+        
         //// Increment the log-likelihood:
         if (prior_only == 0) {
             for (c in 1:2) {
@@ -345,7 +340,7 @@ generated quantities {
           matrix[n_studies, n_thr] dev_d    = rep_matrix(-1, n_studies, n_thr);
           array[2] matrix[n_studies, n_thr] x_hat;
           array[2] matrix[n_studies, n_thr] dev;
-          array[2] vector[n_thr] cutpoints_mu;  // For Mean thr. parameters
+          vector[n_thr] cutpoints_mu;  // For Mean thr. parameters
 
           //// Initialise containers:
           for (c in 1:2) {
@@ -354,44 +349,38 @@ generated quantities {
           }
           
           {
-
                    int n_sims = 100;
-                   array[2] matrix[n_sims, n_cat] prob_ord_mu_sim;
-                   array[2] vector[n_cat] prob_ord_mu;
+                   matrix[n_sims, n_cat] prob_ord_mu_sim;
+                   vector[n_cat] prob_ord_mu;
 
-                   for (c in 1:2) {
-
-                           for (i in 1:n_sims) {
-                               prob_ord_mu_sim[c][i, ]   =  to_row_vector(dirichlet_rng(to_vector(alpha[c])));
-                           }
-
-                           for (k in 1:n_cat) {
-                               prob_ord_mu[c][k]  = mean(prob_ord_mu_sim[c][, k]);
-                           }
-
-                           cutpoints_mu[c][1] =       inv_Phi_approx(prob_ord_mu[c][1]);
-                           for (k in 2:n_thr) {
-                                 cutpoints_mu[c][k] = inv_Phi_approx( prob_ord_mu[c][k] + Phi_approx(cutpoints_mu[c][k - 1]) );
-                           }
-
+                   for (i in 1:n_sims) {
+                       prob_ord_mu_sim[i, ]   =  to_row_vector(dirichlet_rng(to_vector(alpha)));
                    }
 
+                   for (k in 1:n_cat) {
+                       prob_ord_mu[k]  = mean(prob_ord_mu_sim[, k]);
+                   }
+
+                   cutpoints_mu[1] =       inv_Phi_approx(prob_ord_mu[1]);
+                   for (k in 2:n_thr) {
+                         cutpoints_mu[k] = inv_Phi_approx( prob_ord_mu[k] + Phi_approx(cutpoints_mu[k - 1]) );
+                   }
           }
   
           //// Calculate study-specific accuracy:
           for (s in 1:n_studies) {
                 for (k in 1:n_thr) {
-                    fp[s, k] =   Phi_approx((beta[1][s] - cutpoints_nd[s][k])/scale[1][s]);
+                    fp[s, k] =   Phi_approx((beta[1][s] - cutpoints[s][k])/scale[1][s]);
                     sp[s, k] =   1.0 - fp[s, k];
-                    se[s, k] =   Phi_approx((beta[2][s] - cutpoints_d[s][k])/scale[2][s]);
+                    se[s, k] =   Phi_approx((beta[2][s] - cutpoints[s][k])/scale[2][s]);
                 }
           }
   
           //// Calculate summary accuracy (using mean parameters):
           for (k in 1:n_thr) {
-                Fp[k] =   Phi_approx((beta_mu[1] - cutpoints_mu[1][k])/exp(log_scale_mu[1]));
+                Fp[k] =   Phi_approx((beta_mu[1] - cutpoints_mu[k])/exp(log_scale_mu[1]));
                 Sp[k] =   1.0 - Fp[k];
-                Se[k] =   Phi_approx((beta_mu[2] - cutpoints_mu[2][k])/exp(log_scale_mu[2]));
+                Se[k] =   Phi_approx((beta_mu[2] - cutpoints_mu[k])/exp(log_scale_mu[2]));
           }
   
           //// Calculate predictive accuracy:
@@ -406,9 +395,9 @@ generated quantities {
                 }
     
                 for (k in 1:n_thr) {
-                      Fp_pred[k] =   Phi_approx((beta_pred[1] - cutpoints_mu[1][k])/exp(log_cale_pred[1]));
+                      Fp_pred[k] =   Phi_approx((beta_pred[1] - cutpoints_mu[k])/exp(log_cale_pred[1]));
                       Sp_pred[k] =   1.0 - Fp_pred[k];
-                      Se_pred[k] =   Phi_approx((beta_pred[2] - cutpoints_mu[2][k])/exp(log_cale_pred[2]));
+                      Se_pred[k] =   Phi_approx((beta_pred[2] - cutpoints_mu[k])/exp(log_cale_pred[2]));
                 }
           }
   

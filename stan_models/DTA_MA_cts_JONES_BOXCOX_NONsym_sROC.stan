@@ -183,7 +183,7 @@ transformed parameters {
                                     if (cut_i == 1) { //// First non-missing cutpoint
                                          int success_prob = to_int(n[c][s, 1]);
                                          int x_i = to_int(x[c][s, 1]);
-                                         log_lik[c][s, cutpoint_counter] = binomial_lpmf( x_i | success_prob, cond_prob[c][s, 1] );
+                                         log_lik[c][s, cut_i] = binomial_lpmf( x_i | success_prob, cond_prob[c][s, 1] );
                                     } else if (cut_i > 1) { 
                                          int success_prob = to_int(n[c][s, cut_i]);
                                          int x_i = to_int(x[c][s, cut_i]);
@@ -214,6 +214,17 @@ model {
         
         //// For box-cox parameters:
         target +=  normal_lpdf(lambda | 0.00, 0.50);
+        
+        //// Jacobian adjustments needed:
+        if (estimate_scales == 1) { 
+            target += sum(log_scale);                // double-checked the log-derivative of this by hand (correct)
+            if (abs(log_scale_d_SD) != 0.0) {  // just in case inits are set to exactly zero (sampler will otherwise fail)
+                 target += log(abs(log_scale_d_SD));      // double-checked the log-derivative of this by hand (correct)
+            } 
+            if (abs(sum(log_scale_d_z)) != 0.0) {  // just in case inits are set to exactly zero (sampler will otherwise fail)
+                 target += log(abs(sum(log_scale_d_z)));  // double-checked the log-derivative of this by hand (correct)
+            }
+        }
                     
         //// Likelihood using binomial factorization:
         for (c in 1:2) {
