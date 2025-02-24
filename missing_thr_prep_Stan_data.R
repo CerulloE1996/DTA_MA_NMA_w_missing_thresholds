@@ -9,10 +9,12 @@ require(dplyr)
 require(cmdstanr)
 
 n_studies <- 10
-N_per_study_mean <- 2200
-N_per_study_SD <- 500
+N_per_study_mean <- 5000
+N_per_study_SD <- 1000
 assume_perfect_GS <- 1
 seed <- 123
+
+set.seed(seed)
 
 missing_indicator <- -1
 
@@ -40,14 +42,15 @@ sim_results$Se_per_study_all_tests_all_thresholds_list
 
 ## Now for the first example we will only take one index test, as initially we are evaluating just a "simple" model
 ## where there's only a single index test with 12 thresholds (so 13 categories:
-n_thr <- 12
+index_test_chosen_index <- 4
+n_thr <- 25
 n_cat <- n_thr + 1
 y_list_example_1 <- list()
 for (s in 1:n_studies) { 
     N <- nrow(y_list[[s]])
     y <- array(NA, dim = c(N, 2))
     y[, 1] <- y_list[[s]][, 1]
-    y[, 2] <- y_list[[s]][, 5] ## take test #5 as the index test for this example 
+    y[, 2] <- y_list[[s]][, index_test_chosen_index] ## take test #5 as the index test for this example 
     y_list_example_1[[s]] <- y
 }
 
@@ -72,13 +75,13 @@ agg_data_cumulative_with_missing_thresholds <- agg_data_cumulative
 
 
 # {
-#       
+# 
 #     ## First 2 studies only report data for the "middle 8" thresholds (starting from threshold 3, so thr = {3, 4, 5, 6, 7, 8, 9, 10})
 #     studies_subset_vec <- c(1, 2)
 #     missing_thr_subset_vec <- c(1:2, 11:12)
 #     agg_data_cumulative_with_missing_thresholds <-  apply_thr_missingness(  agg_data_cumulative = agg_data_cumulative_with_missing_thresholds,
 #                                                                             studies_subset_vec = studies_subset_vec,
-#                                                                             missing_thr_subset_vec = missing_thr_subset_vec, 
+#                                                                             missing_thr_subset_vec = missing_thr_subset_vec,
 #                                                                             missing_indicator = missing_indicator)
 #     ## The next 2 studies only report at the "middle 4" thresholds (starting at threshold 5): so thr = {5, 6, 7, 8}:
 #     studies_subset_vec <- c(3, 4)
@@ -109,9 +112,9 @@ agg_data_cumulative_with_missing_thresholds <- agg_data_cumulative
 # ## Now let's look at the overall % of missing thresholds:
 # total_missing_thr <- sum(agg_data_cumulative_with_missing_thresholds$x_diseased == 0.999) ; total_missing_thr
 # prop_missing_thr <- total_missing_thr / (n_studies * n_thr) ; prop_missing_thr
-# ## Just under half the threshold data is missing (46.67%). 
+# ## Just under half the threshold data is missing (46.67%).
 # 
-#  
+# #  
 #  
  
 # ## Diseased group:
@@ -215,7 +218,6 @@ print(paste("x_non_diseased_cumulative = ")) ; print(x_non_diseased_cumulative)
         ##
         Stan_data_list$estimate_scales <- 0
         Stan_data_list$same_cutpoints_between_groups <- 0
-        Stan_data_list$random_cutpoints <- 0
         ##
         ## Priors:
         ##
@@ -226,15 +228,17 @@ print(paste("x_non_diseased_cumulative = ")) ; print(x_non_diseased_cumulative)
         Stan_data_list$prior_kappa_mean <-      rep(0.0, 2)
         Stan_data_list$prior_kappa_SD <-        rep(500.0, 2)
         ##
-        Stan_data_list$prior_beta_mu_mean <- c(0.0, 0.0)
-        Stan_data_list$prior_beta_mu_SD   <- c(1.0, 1.0)*1.702
-        Stan_data_list$prior_beta_SD_mean <- c(0.0, 0.0)
-        Stan_data_list$prior_beta_SD_SD   <- c(0.50, 0.50)*1.702
+        Stan_data_list$prior_beta_mu_mean <- rep(0.0, 2)
+        Stan_data_list$prior_beta_mu_SD   <- rep(1.0, 2)   ## *1.702
+        Stan_data_list$prior_beta_SD_mean <- rep(0.0, 2)
+        Stan_data_list$prior_beta_SD_SD   <- rep(0.50, 2)  ## *1.702
         ##
-        Stan_data_list$prior_log_scale_mu_mean <- c(0.0, 0.0)
-        Stan_data_list$prior_log_scale_mu_SD   <- c(0.50, 0.50)*1.702
-        Stan_data_list$prior_log_scale_SD_mean <- c(0.0, 0.0)
-        Stan_data_list$prior_log_scale_SD_SD   <- c(0.25, 0.25)*1.702
+        Stan_data_list$prior_log_scale_mu_mean <- rep(0.0, 2)
+        Stan_data_list$prior_log_scale_mu_SD   <- rep(1.0, 2)   ## *1.702
+        Stan_data_list$prior_log_scale_SD_mean <- rep(0.0, 2)
+        Stan_data_list$prior_log_scale_SD_SD   <- rep(0.50, 2)  ## *1.702
+        ##
+        Stan_data_list$prior_only <- 0
 }
  
 
