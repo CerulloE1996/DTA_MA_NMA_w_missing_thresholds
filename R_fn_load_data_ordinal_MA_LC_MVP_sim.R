@@ -4,16 +4,16 @@
  
  
  # 
- n_studies <- 10
- N_per_study_mean <- 500
- N_per_study_SD <- 1000
- assume_perfect_GS <- 1
- seed <- 123
+ # n_studies <- 10
+ # N_per_study_mean <- 500
+ # N_per_study_SD <- 1000
+ # assume_perfect_GS <- 1
+ # seed <- 123
  
 ## -| ------------------ R function to simulate a meta-analysis dataset for (binary + ordinal) LC_MVP  --------------------------------------------
  
  
-simulate_binary_and_ordinal_MA_LC_MVP_data <- function(   n_studies = 10,
+simulate_binary_and_ordinal_MA_LC_MVP_data <- function(   n_studies = 25,
                                                           N_per_study_mean = 500,
                                                           N_per_study_SD   = 500,
                                                           assume_perfect_GS = 1,
@@ -53,7 +53,7 @@ simulate_binary_and_ordinal_MA_LC_MVP_data <- function(   n_studies = 10,
      
      ## Set true values for disease prevelance:
      true_Mean_probit_prev <- qnorm(true_Mean_prev)
-     true_SD_probit_prev <- 0.50
+     true_SD_probit_prev <- 0.25
      true_probit_prev_per_study <- rnorm(n = n_studies, mean = true_Mean_probit_prev, sd = true_SD_probit_prev)
      true_prev_per_study <- pnorm(true_probit_prev_per_study)
      
@@ -66,7 +66,7 @@ simulate_binary_and_ordinal_MA_LC_MVP_data <- function(   n_studies = 10,
      max_threshold_across_all_tests <- max(n_total_obs_thr_per_test)
      threshold_per_study_array <- array(NA, dim = c(n_studies, max_threshold_across_all_tests))
      Mean_of_thr_for_all_tests_array <- array(NA, dim = c(n_tests, max_threshold_across_all_tests))
-     SD_of_thr_for_all_tests_array <- array(0.50, dim = c(n_tests, max_threshold_across_all_tests)) ## between-study heterogenity for thresholds 
+     SD_of_thr_for_all_tests_array <- array(0.125, dim = c(n_tests, max_threshold_across_all_tests)) ## between-study heterogenity for thresholds 
      
      ## Set the "true values" of the mean threshold between studies for each test (on the * latent * scale):
      ## NOTE: currently assuming that the diseased and non-diseased latent classes have the SAME set of thresholds! 
@@ -121,6 +121,10 @@ simulate_binary_and_ordinal_MA_LC_MVP_data <- function(   n_studies = 10,
      Se_OVERALL_all_tests_all_thresholds <- array(0.0, dim = c(n_tests, max_threshold_across_all_tests))
      Sp_OVERALL_all_tests_all_thresholds <- array(0.0, dim = c(n_tests, max_threshold_across_all_tests))
      
+     
+     true_DGP_one_m_Se <- pnorm(location_d - Mean_of_thr_for_all_tests_array)
+     true_DGP_Sp       <- pnorm(location_nd - Mean_of_thr_for_all_tests_array)
+     
    
    for (s in 1:n_studies) {
      
@@ -164,8 +168,8 @@ simulate_binary_and_ordinal_MA_LC_MVP_data <- function(   n_studies = 10,
                    diag(Sigma_nd) <- rep(1, n_tests)
              }
              
-             L_Sigma_d   <- BayesMVP:::Rcpp_Chol(Sigma_d) # PD check (fails if not PD)
-             L_Sigma_nd  <- BayesMVP:::Rcpp_Chol(Sigma_nd) # PD check (fails if not PD)
+             L_Sigma_d   <- t(chol(Sigma_d)) # PD check (fails if not PD)
+             L_Sigma_nd  <- t(chol(Sigma_nd))   ## BayesMVP:::Rcpp_Chol(Sigma_nd) # PD check (fails if not PD)
              
              d_ind <- sort(rbinom(n = N, size = 1, prob = true_prev))
              ##
@@ -326,24 +330,24 @@ simulate_binary_and_ordinal_MA_LC_MVP_data <- function(   n_studies = 10,
    }
    
 
-       # # Compute OVERALL observed TRUE Se:
-       # for (t in 2:n_tests) {
-       #   n_thr <- n_total_obs_thr_per_test[t] 
-       #   for (k in 1:n_thr) {
-       #     Se_OVERALL_all_tests_all_thresholds[t, k] <- n_TP_at_current_threshold_OVERALL[t, k]/n_pos_OVERALL
-       #   }
-       # }
-       Se_OVERALL_all_tests_all_thresholds <-  mean_matrix <- Reduce(`+`, Se_per_study_all_tests_all_thresholds_list) / length(Se_per_study_all_tests_all_thresholds_list)
+       ## Compute OVERALL observed TRUE Se:
+       for (t in 2:n_tests) {
+         n_thr <- n_total_obs_thr_per_test[t]
+         for (k in 1:n_thr) {
+           Se_OVERALL_all_tests_all_thresholds[t, k] <- n_TP_at_current_threshold_OVERALL[t, k]/n_pos_OVERALL
+         }
+       }
+       # Se_OVERALL_all_tests_all_thresholds <- Reduce(`+`, Se_per_study_all_tests_all_thresholds_list) / length(Se_per_study_all_tests_all_thresholds_list)
       
        
-       # Compute OVERALL observed TRUE Fp / Sp:
-       # for (t in 2:n_tests) {
-       #   n_thr <- n_total_obs_thr_per_test[t] 
-       #   for (k in 1:n_thr) {
-       #     Sp_OVERALL_all_tests_all_thresholds[t, k] <- 1.0 - (n_FP_at_current_threshold_OVERALL[t, k]/n_neg_OVERALL)
-       #   }
-       # }
-       Sp_OVERALL_all_tests_all_thresholds <-  mean_matrix <- Reduce(`+`, Sp_per_study_all_tests_all_thresholds_list) / length(Sp_per_study_all_tests_all_thresholds_list)
+       ## Compute OVERALL observed TRUE Fp / Sp:
+       for (t in 2:n_tests) {
+         n_thr <- n_total_obs_thr_per_test[t]
+         for (k in 1:n_thr) {
+           Sp_OVERALL_all_tests_all_thresholds[t, k] <- 1.0 - (n_FP_at_current_threshold_OVERALL[t, k]/n_neg_OVERALL)
+         }
+       }
+       # Sp_OVERALL_all_tests_all_thresholds <- Reduce(`+`, Sp_per_study_all_tests_all_thresholds_list) / length(Sp_per_study_all_tests_all_thresholds_list)
        
        y_tibble <- NULL
        y_tibble <- tibble(data.table::rbindlist(y_df_list, idcol = "Study"))
@@ -358,8 +362,8 @@ simulate_binary_and_ordinal_MA_LC_MVP_data <- function(   n_studies = 10,
      # Mean_Sp_at_threshold_0 = Mean_Sp_at_threshold_0,
      true_Mean_prev = true_Mean_prev,
      ## Between-study true params:
-     SD_of_Phi_Se_at_threshold_0 = SD_of_Phi_Se_at_threshold_0,
-     SD_of_Phi_Fp_at_threshold_0 = SD_of_Phi_Fp_at_threshold_0,
+     # SD_of_Phi_Se_at_threshold_0 = SD_of_Phi_Se_at_threshold_0,
+     # SD_of_Phi_Fp_at_threshold_0 = SD_of_Phi_Fp_at_threshold_0,
      ## Between-study true params:
      n_total_obs_thr_per_test = n_total_obs_thr_per_test,
      ## Within-study true params:
@@ -372,7 +376,9 @@ simulate_binary_and_ordinal_MA_LC_MVP_data <- function(   n_studies = 10,
      Se_per_study_ref = Se_per_study_ref,
      Sp_per_study_ref = Sp_per_study_ref,
      Se_OVERALL_all_tests_all_thresholds = Se_OVERALL_all_tests_all_thresholds,
-     Sp_OVERALL_all_tests_all_thresholds = Sp_OVERALL_all_tests_all_thresholds
+     Sp_OVERALL_all_tests_all_thresholds = Sp_OVERALL_all_tests_all_thresholds,
+     true_DGP_one_m_Se = true_DGP_one_m_Se,
+     true_DGP_Sp = true_DGP_Sp
      # ## 
      # Sigma_nd_true_observed_list = Sigma_nd_true_observed_list,
      # Sigma_d_true_observed_list = Sigma_d_true_observed_list,
@@ -417,32 +423,46 @@ simulate_binary_and_ordinal_MA_LC_MVP_data <- function(   n_studies = 10,
                                          n_studies, 
                                          n_thr) {
    
-         n_non_diseased <- n_diseased <- numeric(n_studies)
+         n_total_non_diseased <- n_total_diseased <- numeric(n_studies)
          x_non_diseased <- x_diseased <- matrix(NA, n_studies, n_thr)
+         n_non_diseased <- n_diseased <- matrix(NA, n_studies, n_thr + 1)
+         Se_per_study <- Sp_per_study <- matrix(NA, n_studies, n_thr)
          
          for (s in 1:n_studies) {
            
                study_data <- y_list[[s]]
                disease_status <- study_data[,1] # Assuming column 1 is disease status
-               test_results <- study_data[,2] # Assuming column 2 is test results
+               test_results   <- study_data[,2] # Assuming column 2 is test results
                
-               # Get n_diseased and n_non_diseased 
-               n_diseased[s] <- sum(disease_status == 1)
-               n_non_diseased[s] <- sum(disease_status == 0)
+               # Get n_total_diseased and n_total_non_diseased 
+               n_total_diseased[s] <- sum(disease_status == 1)
+               n_total_non_diseased[s] <- sum(disease_status == 0)
                
                # Get counts for each threshold
                for (k in 1:n_thr) {
-                 x_diseased[s, k] <- sum(test_results[disease_status == 1] > k)
-                 x_non_diseased[s, k] <- sum(test_results[disease_status == 0] > k)
+                 x_diseased[s, k]     <- sum(test_results[disease_status == 1] <= k) # Pr(testing NEGATIVE at threshold k)
+                 n_diseased[s, k] <- x_diseased[s, k]
+                 Se_per_study[s, k] <- 1.00 - (x_diseased[s, k] / n_total_diseased[s])
+                 ##
+                 x_non_diseased[s, k] <- sum(test_results[disease_status == 0] <= k) # Pr(testing NEGATIVE at threshold k)
+                 n_non_diseased[s, k] <- x_non_diseased[s, k]
+                 Sp_per_study[s, k] <- x_non_diseased[s, k] / n_total_non_diseased[s]
                }
-               
+               n_diseased[s, n_thr + 1]     <- n_total_diseased[s]
+               n_non_diseased[s, n_thr + 1] <- n_total_non_diseased[s]
+               # x_diseased[s, n_thr + 1]     <-  n_total_diseased[s]     -  x_diseased[s, n_thr]
+               # x_non_diseased[s, n_thr + 1] <-  n_total_non_diseased[s] -  x_non_diseased[s, n_thr]
          }
          
          return(list(
-           n_diseased = n_diseased,
-           n_non_diseased = n_non_diseased, 
+           n_total_diseased = n_total_diseased,
+           n_total_non_diseased = n_total_non_diseased, 
            x_diseased = x_diseased,
-           x_non_diseased = x_non_diseased
+           x_non_diseased = x_non_diseased,
+           n_diseased = n_diseased,
+           n_non_diseased = n_non_diseased,
+           Se_per_study = Se_per_study,
+           Sp_per_study = Sp_per_study
          ))
          
  }
@@ -468,7 +488,7 @@ simulate_binary_and_ordinal_MA_LC_MVP_data <- function(   n_studies = 10,
 apply_thr_missingness <- function(  agg_data_cumulative, 
                                     studies_subset_vec,
                                     missing_thr_subset_vec,
-                                    missing_indicator = 0.999) { 
+                                    missing_indicator = -1) { 
   
   agg_data_cumulative$x_diseased[studies_subset_vec, missing_thr_subset_vec] <- missing_indicator
   agg_data_cumulative$x_non_diseased[studies_subset_vec, missing_thr_subset_vec] <- missing_indicator
@@ -490,133 +510,138 @@ apply_thr_missingness <- function(  agg_data_cumulative,
 
 
 
-convert_cumulative_to_category <- function( cumulative_matrix,
-                                            missing_indicator = 0.999) {
-  
-      # Get dimensions and create output matrix with one extra column
-      n_rows <- nrow(cumulative_matrix)
-      n_cols <- ncol(cumulative_matrix)
-      category_matrix <- matrix(missing_indicator, nrow = n_rows, ncol = n_cols + 1)
-      
-      for (i in 1:n_rows) {
-        # Get current row
-        row_data <- cumulative_matrix[i, ]
-        
-        # First category is same as first cumulative count
-        category_matrix[i, 1] <- row_data[1]
-        
-        # Process remaining categories
-        for (j in 1:n_cols) {
-          current_val <- row_data[j]
-          
-          # If at last column, this number goes in the last category
-          if (j == n_cols) {
-            if (current_val != missing_indicator) {
-              category_matrix[i, n_cols + 1] <- current_val
-            }
-            next
-          }
-          
-          # Get next value
-          next_val <- row_data[j + 1]
-          
-          # If either current or next value is missing_indicator, we can't calculate this category
-          if (current_val == missing_indicator || next_val == missing_indicator) {
-            category_matrix[i, j + 1] <- missing_indicator
-            next
-          }
-          
-          # Calculate category count as difference between current and next cumulative count
-          category_matrix[i, j + 1] <- current_val - next_val
-        }
-      }
-      
-      return(category_matrix)
-  
-}
 
 
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-categorical_to_individual <- function( categorical_matrix, 
-                                       binary_disease_indicator,
-                                       missing_indicator = 0.999) {
-  
-        # Initialize list to store results
-        results <- list()
-        n_studies <- nrow(categorical_matrix)
-        n_categories <- ncol(categorical_matrix)
-        
-        for (study in 1:n_studies) {
-          # Get counts for current study
-          study_counts <- categorical_matrix[study, ]
-          
-          # Initialize vectors for this study
-          study_id <- vector()
-          category_values <- vector()
-          
-          # For each category
-          for (cat in 1:n_categories) {
-            count <- study_counts[cat]
-            
-            if (count == missing_indicator) {
-              # For missing data, create one observation with missing_indicator
-              study_id <- c(study_id, study)
-              category_values <- c(category_values, missing_indicator)
-            } else if (count > 0) {
-              # For non-missing data, replicate the category value count times
-              study_id <- c(study_id, rep(study, count))
-              category_values <- c(category_values, rep(cat, count))
-            }
-          }
-          
-          # Create data frame for this study
-          study_data <- data.frame(
-            study_id = study_id,
-            group = binary_disease_indicator,  # 1 for diseased, 0 for non-diseased
-            value = category_values
-          )
-          
-          results[[study]] <- study_data
-        }
-        
-        # Combine all studies into one data frame
-        final_data <- do.call(rbind, results)
-        rownames(final_data) <- NULL  # Reset row names
-        
-        return(final_data)
-  
-}
-
-
-
-
-
+# 
+# 
+# 
+# 
+# convert_cumulative_to_category <- function(cumulative_matrix, 
+#                                            missing_indicator = -1) {
+#   
+#   # Get dimensions and create output matrix with same dimensions plus one column
+#   n_rows <- nrow(cumulative_matrix)
+#   n_cols <- ncol(cumulative_matrix)
+#   category_matrix <- matrix(-1, nrow = n_rows, ncol = n_cols + 1)
+#   
+#   for (i in 1:n_rows) {
+#     # Get current row
+#     row_data <- cumulative_matrix[i, ]
+#     
+#     # First category is the first cumulative count
+#     category_matrix[i, 1] <- row_data[1]
+#     
+#     # Second category is second column minus first column
+#     if (n_cols >= 2) {
+#       if (!is.na(row_data[1]) && !is.na(row_data[2])) {
+#         category_matrix[i, 2] <- row_data[2] - row_data[1]
+#       }
+#     }
+#     
+#     # Process remaining categories by taking differences
+#     for (j in 2:(n_cols-1)) {
+#       if (!is.na(row_data[j]) && !is.na(row_data[j+1])) {
+#         category_matrix[i, j+1] <- row_data[j+1] - row_data[j]
+#       }
+#     }
+#     
+#     # Last category is the total minus the last cumulative count
+#     # (Assuming we want all categories to sum to the total)
+#     if (!is.na(row_data[n_cols])) {
+#       total <- row_data[n_cols]
+#       category_matrix[i, n_cols+1] <- 0  # Default to zero
+#       
+#       # If we want a true non-zero last category, we would need the actual total N
+#       # which isn't directly provided in this data format
+#     }
+#   }
+#   
+#   return(category_matrix[, 1:n_cols])
+#   
+# }
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# categorical_to_individual <- function( categorical_matrix, 
+#                                        binary_disease_indicator,
+#                                        missing_indicator = -1) {
+#   
+#         # Initialize list to store results
+#         results <- list()
+#         n_studies <- nrow(categorical_matrix)
+#         n_categories <- ncol(categorical_matrix)
+#         
+#         for (study in 1:n_studies) {
+#           # Get counts for current study
+#           study_counts <- categorical_matrix[study, ]
+#           
+#           # Initialize vectors for this study
+#           study_id <- vector()
+#           category_values <- vector()
+#           
+#           # For each category
+#           for (cat in 1:n_categories) {
+#             count <- study_counts[cat]
+#             
+#             if (count == missing_indicator) {
+#               # For missing data, create one observation with missing_indicator
+#               study_id <- c(study_id, study)
+#               category_values <- c(category_values, missing_indicator)
+#             } else if (count > 0) {
+#               # For non-missing data, replicate the category value count times
+#               study_id <- c(study_id, rep(study, count))
+#               category_values <- c(category_values, rep(cat, count))
+#             }
+#           }
+#           
+#           # Create data frame for this study
+#           study_data <- data.frame(
+#             study_id = study_id,
+#             group = binary_disease_indicator,  # 1 for diseased, 0 for non-diseased
+#             value = category_values
+#           )
+#           
+#           results[[study]] <- study_data
+#         }
+#         
+#         # Combine all studies into one data frame
+#         final_data <- do.call(rbind, results)
+#         rownames(final_data) <- NULL  # Reset row names
+#         
+#         return(final_data)
+#   
+# }
+# 
+# 
+# 
+# 
+# 
 
 
 
