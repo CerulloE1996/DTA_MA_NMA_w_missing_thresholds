@@ -146,15 +146,14 @@ data {
   
 }
 
+
 transformed data { 
     
         int n_cat = n_thr + 1; //// Number of ordinal categories for index test
         int n_sets_of_cutpoints = 1;
-        real alpha_lb = exp(log_alpha_lb);
         
 }
   
-
 
 parameters {
   
@@ -163,15 +162,14 @@ parameters {
         matrix[2, n_studies] beta_z;    // Study-specific random effects for beta (off-centered parameterisation)
         cholesky_factor_corr[2] beta_L_Omega;
         ////
-        vector[n_thr - 1] log_increment_MU;
-        vector<lower=0.0>[n_thr - 1] log_increment_SD;
-        matrix<lower=0.0>[n_studies, n_thr - 1] increment;
+        ordered[n_thr] C_MU;
+        vector<lower=0.0>[n_thr] C_SD;
+        matrix[n_studies, n_thr - 1] raw_inc;
         ////
-        real first_C_MU;
-        real<lower=0.0> first_C_SD;
         vector[n_studies] first_C;
         
 }
+
 
 transformed parameters { 
     
@@ -188,121 +186,85 @@ transformed parameters {
         array[n_sets_of_cutpoints] vector[n_cat] Ind_Dir_ord_prob;
         ////
         array[n_sets_of_cutpoints] matrix[n_studies, n_thr] C;
-        matrix[n_sets_of_cutpoints, n_thr] C_MU;   
-        matrix[n_sets_of_cutpoints, n_thr] C_MED;
-        ////
-        // vector[n_thr] trans_C_MU;
-        // vector[n_thr] trans_C_MED;  
-        // matrix[n_studies, n_thr] trans_C;
-        ////
-        vector[n_thr - 1] increment_MU;
-        vector[n_thr - 1] increment_MED;
+        // matrix[n_sets_of_cutpoints, n_thr] C_MED;
         real Jacobian_for_unc_C_to_trans_C_MU = 0.0;
         real Jacobian_for_unc_C_to_trans_C = 0.0;
-        real Jacobian_for_MED_to_MU = 0.0;
-        matrix[n_studies, n_thr - 1] log_increment = log(increment);
-        // //// We have: log_increment ~ normal(log_increment_MU, log_increment_SD)
-        // Hence: 
-        // increment_MU = exp(log_increment_MU + 0.5 * square(log_increment_SD));
-        // increment_MED = exp(log_increment_MU);
         ////
-        //// Compute increment_MU:
-        ////
-        //// increment_MU[1] = log_increment_MU[1];
-                            // real log_inc_SD = log_increment_SD[k - 1];
-                            // real log_inc_var = square(log_inc_SD);
-                            // real inc_MU  = exp(log_inc_MU + 0.5 * log_inc_SD);
-                            // real inc_MED = exp(log_inc_MU);
-                            // //// real inc_SD = sqrt( (exp(log_inc_var) - 1.0) * exp(2.0*log_inc_MU + log_inc_var)); 
-                            // real q16 = exp(log_inc_MU + log_inc_SD * inv_Phi(0.16));
-                            // real q84 = exp(log_inc_MU + log_inc_SD * inv_Phi(1.0 - 0.16));
-                            // real inc_SD_approx = sqrt((q84-inc_MED)*(inc_MED-q16));
-                            // trans_C_sim[i, k] = normal_rng(inc_MED, inc_SD_approx);
-                            // C_sim[i, k] = C_sim[i, k - 1] + trans_C_sim[i, k];
-                            
-        for (k in 1:(n_thr - 1)) {
-            increment_MED[k] = exp(log_increment_MU[k]);
-            increment_MU[k]  = exp(log_increment_MU[k] + 0.5 * square(log_increment_SD[k]));
-            real q16 = exp(log_increment_MU[k] + log_increment_SD[k] * inv_Phi(0.16));
-            real q84 = exp(log_increment_MU[k] + log_increment_SD[k] * inv_Phi(1.0 - 0.16));
-            real inc_SD_approx = sqrt((q84-increment_MED[k])*(increment_MED[k]-q16));
-            real log_abs_deriv_wrt_MU = increment_MU[k];
-            real log_abs_deriv_wrt_SD = increment_MU[k] + log(abs(log_increment_SD[k]));
-            Jacobian_for_MED_to_MU += log_abs_deriv_wrt_MU + log_abs_deriv_wrt_SD;
-        }
-        ////
-        //// study-specific cutpoints (construct study-specific soft_C and then study-specific cutpoints)
-        ////
-        // First cutpoint is unconstrained:
-        for (s in 1:n_studies) {
-            C[1][s, 1]    = first_C[s];  //// first_C_mu + softplus_SD[1] * softplus_z[s, 1];  ///// log_increment[s, 1] ~ normal(log_increment_MU[1], unc_C_normal_SD[1]);
-            Jacobian_for_unc_C_to_trans_C += 0.0; //// No Jacobian needed. 
+        vector<lower=0.0>[n_thr - 1] gap;
+        matrix<lower=0.0>[n_studies, n_thr - 1] inc;
+        //// 
+        //// study-specific cutpoints (construct study-specific trans_C and then study-specific cutpoints)
+        //// 
+        C[1][, 1] = first_C;
+        for (k in 2:n_thr) {
+                gap[k - 1] = C_MU[k] - C_MU[k - 1];
+                for (s in 1:n_studies) {
+                    //// Ensure the study-specific cutpoint maintains ordering:
+                    inc[s, k - 1] =  log1p_exp(raw_inc[s, k - 1]);
+                    C[1][s, k] = C[1][s, k - 1] + inc[s, k - 1];
+                    //// Jacobian for   raw_inc -> inc transformation:
+                    Jacobian_for_unc_C_to_trans_C_MU += log_inv_logit(raw_inc[s, k - 1]);
+                    //// Jacobian for   inc -> C transformation:
+                    Jacobian_for_unc_C_to_trans_C_MU += 0.0; //// No Jacobian as inc -> C is linear transformation. 
+                }
         }
         // // Subsequent cutpoints:
         // {
-        //       //// ---- For constructing each study-specific trans_C just in terms of log_increment[s, k]:
+        //       //// ---- For constructing each study-specific trans_C just in terms of unc_C_normal[s, k]:
         //       ////
-        //       //// trans_C[, 2:n_thr]  = exp(log_increment[, 2:n_thr]);
-        //       trans_C[, 2:n_thr]  = increment;
-        //       //// deriv of trans_C w.r.t log_increment:
-        //       /// Jacobian_for_unc_C_to_trans_C += sum(log_increment[, 2:n_thr]);
-        //       // //// deriv of log_increment w.r.t log_increment_MU, unc_C_normal_SD and unc_C_normal_z:
-        //       // Jacobian_for_unc_C_to_trans_C += 0.0;
-        //       // Jacobian_for_unc_C_to_trans_C += log(sum(abs(unc_C_normal_z[, 2:n_thr])));
-        //       // Jacobian_for_unc_C_to_trans_C += log(sum(abs(unc_C_normal_SD[2:n_thr])));
-        //       // ////
-        //       // //// ---- For constructing each study-specific trans_C in terms of log_increment[s, k] AND ALSO in terms of unc_C_normal_SD[k]:
+        //       trans_C[, 2:n_thr] = log1p_exp(unc_C_normal[, 2:n_thr]);
+        //       //// deriv of trans_C w.r.t unc_C_normal:
+        //       Jacobian_for_unc_C_to_trans_C +=  sum(log_inv_logit(unc_C_normal[, 2:n_thr]));
+        //       // // //// deriv of unc_C_normal w.r.t unc_C_normal_MU, unc_C_normal_SD and unc_C_normal_z:
+        //       // // Jacobian_for_unc_C_to_trans_C += 0.0;
+        //       // // Jacobian_for_unc_C_to_trans_C += log(sum(abs(unc_C_normal_z[, 2:n_thr])));
+        //       // // Jacobian_for_unc_C_to_trans_C += log(sum(abs(unc_C_normal_SD[2:n_thr])));
+        //       ////
+        //       // //// ---- For constructing each study-specific trans_C in terms of unc_C_normal[s, k] AND ALSO in terms of unc_C_normal_SD[k]:
         //       // matrix[n_studies, n_thr] unc_C_normal_SD_sq_mat;
         //       // for (s in 1:n_studies) {
         //       //     unc_C_normal_SD_sq_mat[s, ] = to_row_vector(unc_C_normal_SD_sq);
         //       // }
-        //       // trans_C[, 2:n_thr]  = exp(log_increment[, 2:n_thr] + 0.5 * unc_C_normal_SD_sq_mat[, 2:n_thr]);
-        //       // //// deriv of trans_C w.r.t log_increment:
-        //       // Jacobian_for_unc_C_to_trans_C += sum(log(abs(trans_C[, 2:n_thr])));
-        //       // // //// deriv of log_increment w.r.t log_increment_MU, unc_C_normal_SD and unc_C_normal_z:
-        //       // // Jacobian_for_unc_C_to_trans_C += 0.0;           
-        //       // // Jacobian_for_unc_C_to_trans_C += log(sum(abs(unc_C_normal_z[, 2:n_thr]))); 
-        //       // // Jacobian_for_unc_C_to_trans_C += log(sum(abs(unc_C_normal_SD[2:n_thr])));  
+        //       // trans_C[, 2:n_thr]  = log1p_exp(unc_C_normal[, 2:n_thr] + 0.5 * unc_C_normal_SD_sq_mat[, 2:n_thr]);
+        //       // //// deriv of trans_C w.r.t unc_C_normal:
+        //       // Jacobian_for_unc_C_to_trans_C += sum(log_inv_logit(unc_C_normal[, 2:n_thr]));
+        //       // // //// deriv of unc_C_normal w.r.t unc_C_normal_MU, unc_C_normal_SD and unc_C_normal_z:
+        //       // // Jacobian_for_unc_C_to_trans_C += 0.0;
+        //       // // Jacobian_for_unc_C_to_trans_C += log(sum(abs(unc_C_normal_z[, 2:n_thr])));
+        //       // // Jacobian_for_unc_C_to_trans_C += log(sum(abs(unc_C_normal_SD[2:n_thr])));
         //       // //// deriv of trans_C w.r.t unc_C_normal_SD:
-        //       // Jacobian_for_unc_C_to_trans_C += sum(log(abs(trans_C[, 2:n_thr]))) + n_studies*log(sum(abs(unc_C_normal_SD[2:n_thr])));
+        //       // Jacobian_for_unc_C_to_trans_C += n_studies*log(sum(abs(unc_C_normal_SD[2:n_thr])));
         // }
-        //// Then construct C from trans_C:
-        for (k in 2:n_thr) {
-            for (s in 1:n_studies) {
-                C[1][s, k] = C[1][s, k - 1] + increment[s, k - 1]; // No Jacobian needed for transformation trans_C -> C
-            }
-        }
         // ////
-        // //// construct positive-constrained trans_C params:
+        // //// construct positive-constrained trans_C_MU (SUMMARY) params:
         // ////
-        // trans_C_MED[1] = first_C_MU; // first cutpoint is unconstrained
-        // trans_C_MU[1]  = first_C_MU; // first cutpoint is unconstrained
-        // ////
+        // trans_C_MED[1] = unc_C_normal_MU[1]; // first cutpoint is unconstrained
+        // trans_C_MU[1]  = unc_C_normal_MU[1]; // first cutpoint is unconstrained
+        // //// 
         // for (k in 2:n_thr) {
-        //     real stuff_to_exp = increment_MU[k];
-        //     trans_C_MU[k]  = exp(increment_MU[k]);
-        //     // real stuff_to_exp = log_increment_MU[k];
-        //     trans_C_MED[k]    = exp(increment_MU[k]);
-        //     //// deriv of trans_C_MU w.r.t log_increment_MU:
-        //     //// deriv of trans_C_MU[k]  = exp(log_increment_MU[k] + 0.5 * unc_C_normal_SD_sq[k]) w.r.t  log_increment_MU is:
-        //     //// exp(stuff_to_exp) * deriv_of_correction_wrt_unc_C_normal_MU = exp(stuff_to_exp) * 1;
-        //     Jacobian_for_unc_C_to_trans_C_MU += stuff_to_exp;  //// deriv of trans_C_MU w.r.t log_increment_MU = log(abs(trans_C_MU[k])) + log(abs(1));
-        //     // //// deriv of trans_C_MU w.r.t unc_C_normal_SD = log(abs(trans_C_MU[k])) + log(abs(unc_C_normal_SD[k]));
-        //     //// real log_abs_deriv_of_correction_wrt_SD =  log(abs(unc_C_normal_SD[k]));
-        //     //// Jacobian_for_unc_C_to_trans_C_MU += stuff_to_exp + log_abs_deriv_of_correction_wrt_SD;  
-        //     // //// Jacobian_for_MU_to_MED += log_inv_logit(log_increment_MU[k]); //// since derivative of log1p_exp is inv_logit!
+        //     // real stuff_to_softplus =   unc_C_normal_MU[k] + 0.5 * unc_C_normal_SD_sq[k];
+        //     trans_C_MU[k]  = log1p_exp(unc_C_normal_MU[k] + 0.5 * unc_C_normal_SD_sq[k]);
+        //     real stuff_to_softplus = unc_C_normal_MU[k];
+        //     trans_C_MED[k] =  log1p_exp(unc_C_normal_MU[k]);
+        //     //// deriv of trans_C_MU w.r.t unc_C_normal_MU:
+        //     //// deriv of trans_C_MU[k]  = exp(stuff_to_softplus) w.r.t  unc_C_normal_MU is:
+        //     //// exp(stuff_to_softplus) * deriv_of_correction_wrt_unc_C_normal_MU = exp(stuff_to_softplus) * 1;
+        //     Jacobian_for_unc_C_to_trans_C_MU += log_inv_logit(stuff_to_softplus);  //// deriv of trans_C_MU w.r.t unc_C_normal_MU
+        //     // //// deriv of trans_C_MU w.r.t unc_C_normal_SD:
+        //     // real log_abs_deriv_of_correction_wrt_SD =  log(abs(unc_C_normal_SD[k]));
+        //     // Jacobian_for_unc_C_to_trans_C_MU += log_inv_logit(stuff_to_softplus) + log_abs_deriv_of_correction_wrt_SD;  
+        //     // //// Jacobian_for_MU_to_MED += log_inv_logit(unc_C_normal_MU[k]); //// since derivative of log1p_exp is inv_logit!
         // }
-        ////
-        //// Summary cutpoints:
-        ////
-        // First cutpoint is directly parameterized:
-        C_MED[1, 1] = first_C_MU;
-        C_MU[1, 1]  = first_C_MU;
-        for (k in 2:n_thr) {
-                C_MED[1, k] = C_MED[1, k - 1] + increment_MU[k - 1]; // No Jacobian needed for transformation trans_C_MED -> C_MED
-                C_MU[1, k]  = C_MU[1, k - 1]  + increment_MU[k - 1];  // No Jacobian needed for transformation trans_C_MU -> C_MED
-        }
-        ////
+        // ////
+        // //// Summary cutpoints:
+        // ////
+        // // First cutpoint is directly parameterized:
+        // C_MED[1, 1] = trans_C_MED[1];
+        // C_MU[1, 1]  = trans_C_MU[1];
+        // for (k in 2:n_thr) {
+        //         C_MED[1, k] = C_MED[1, k - 1] + trans_C_MED[k]; // No Jacobian needed for transformation trans_C_MU -> C_MED
+        //         C_MU[1, k]  = C_MU[1, k - 1]  + trans_C_MU[k]; // No Jacobian needed for transformation trans_C_MU -> C_MED
+        // }
         //// Initialise matrices:
         ////
         for (c in 1:2) {
@@ -328,10 +290,9 @@ transformed parameters {
         ////
         for (c in 1:n_sets_of_cutpoints) {
                 for (k in 1:n_thr) {
-                         //// Ind_Dir_cumul[c][k] = (C_MED[1, k] - 0.0);
-                         Ind_Dir_cumul[c][k] = (C_MU[1, k]  - 0.0);
+                         Ind_Dir_cumul[c][k] = (C_MU[k] - 0.0);
                 }
-                Ind_Dir_cumul_prob[c] = Phi(Ind_Dir_cumul[c]);
+                Ind_Dir_cumul_prob[c] = Phi(Ind_Dir_cumul[c]); /// NaN here ???
                 {
                     //// Induced-Dirichlet ordinal probs:
                     Ind_Dir_ord_prob[c][1] = Ind_Dir_cumul_prob[c][1] - 0.0;
@@ -402,25 +363,25 @@ model {
             beta_L_Omega ~ lkj_corr_cholesky(2.0);
         }
         //// Cutpoint priors:
-        first_C_MU ~ normal(0.0, 5.0);
-        first_C_SD ~ normal(0.0, 5.0);
-        log_increment_MU ~ normal(0, 5.0);
-        log_increment_SD ~ normal(0, 5.0);
-        // unc_C_normal_SD[2:n_thr] ~ normal(0, 2.5); //// need this prior if parameterising summary cutpoints in terms of MEDIANS of unc_C (NOT means).  
+        C_MU[1] ~ normal(0, 5.0);
+        C_SD    ~ normal(0, 1.0);
+        // unc_C_normal_SD[2:n_thr] ~ normal(0, 2.5); //// need this prior if parameterising summary cutpoints in terms of MEDIANS of unc_C (NOT means). 
         ////
         ////
         for (s in 1:n_studies) {
-            first_C[s] ~ normal(first_C_MU, first_C_SD);
-            for (k in 1:(n_thr - 1)) {
-                increment[s, k] ~ lognormal(log_increment_MU[k], log_increment_SD[k]);
-            }
+            first_C[s] ~ normal(C_MU[1], C_SD[1]);
+        }
+        //// Rest of cutpoints:
+        for (k in 2:n_thr) {
+              for (s in 1:n_studies) {
+                  raw_inc[s, k - 1] ~ normal(gap[k - 1], C_SD[k - 1]);
+              }
         }
         ////
         //// Jacobian adjustment for transforming from unc_C -> C
         ////
         target += Jacobian_for_unc_C_to_trans_C;
         target += Jacobian_for_unc_C_to_trans_C_MU;
-        target += Jacobian_for_MED_to_MU;
         ////
         //// Cutpoint between study model:
         ////
@@ -444,9 +405,12 @@ model {
 }
 
 
+
+
+ 
+
 generated quantities {
 
-          //// Summary accuracy parameters (at each threshold):
           vector[n_thr] Fp;
           vector[n_thr] Sp;
           vector[n_thr] Se;
@@ -495,39 +459,30 @@ generated quantities {
           matrix[n_sets_of_cutpoints, n_thr] trans_C_medians; 
           matrix[n_sets_of_cutpoints, n_thr] trans_C_means; 
                      
-          //// Summary cutpoints:
-          {
-            int n_sims = 1000;
-            matrix[n_sims, n_thr] C_sim;
-            matrix[n_sims, n_thr] trans_C_sim;
-            for (i in 1:n_sims) {
-                     C_sim[i, 1] = normal_rng(first_C_MU, first_C_SD);
-                     trans_C_sim[i, 1] = C_sim[i, 1];
-                     // Subsequent cutpoints:
-                     for (k in 2:n_thr) {
-                            real log_inc_MU = log_increment_MU[k - 1];
-                            real log_inc_SD = log_increment_SD[k - 1];
-                            real log_inc_var = square(log_inc_SD);
-                            real inc_MU  = exp(log_inc_MU + 0.5 * log_inc_SD);
-                            real inc_MED = exp(log_inc_MU);
-                            real inc_SD = sqrt( (exp(log_inc_var) - 1.0) * exp(2.0*log_inc_MU + log_inc_var)); 
-                            real q16 = exp(log_inc_MU + log_inc_SD * inv_Phi(0.16));
-                            real q84 = exp(log_inc_MU + log_inc_SD * inv_Phi(1.0 - 0.16));
-                            real inc_SD_approx = sqrt((q84-inc_MED)*(inc_MED-q16));
-                            trans_C_sim[i, k] = normal_rng(inc_MED, inc_SD_approx);
-                            C_sim[i, k] = C_sim[i, k - 1] + trans_C_sim[i, k];
-                     }
-            }
-
-            // Compute summary cutpoints as medians:
-            for (k in 1:n_thr) {
-                trans_C_medians[1, k] = median(trans_C_sim[, k]);
-                trans_C_means[1, k]   = mean(trans_C_sim[, k]);
-                C_SIM_medians[1, k] = median(C_sim[, k]);
-                C_SIM_means[1, k]   = mean(C_sim[, k]);
-            }
-          }
-
+          // //// Summary cutpoints:
+          // {
+          //       int n_sims = 1000;
+          //       matrix[n_sims, n_thr] C_sim;
+          //       matrix[n_sims, n_thr] trans_C_sim;
+          //       for (i in 1:n_sims) {
+          //                C_sim[i, 1] = normal_rng(unc_C_normal_MU[1], unc_C_normal_SD[1]);
+          //                trans_C_sim[i, 1] = C_sim[i, 1];
+          //                // Subsequent cutpoints:
+          //                for (k in 2:n_thr) {
+          //                       real unc_C_normal_sim = normal_rng(unc_C_normal_MU[k], unc_C_normal_SD[k]);
+          //                       trans_C_sim[i, k] = log1p_exp(unc_C_normal_sim);
+          //                       C_sim[i, k] = C_sim[i, k - 1] + trans_C_sim[i, k];
+          //                }
+          //       }
+          // 
+          //       // Compute summary cutpoints as medians:
+          //       for (k in 1:n_thr) {
+          //           trans_C_medians[1, k] = median(trans_C_sim[, k]);
+          //           trans_C_means[1, k]   = mean(trans_C_sim[, k]);
+          //           C_SIM_medians[1, k] = median(C_sim[, k]);
+          //           C_SIM_means[1, k]   = mean(C_sim[, k]);
+          //       }
+          // }
           //// Initialise containers:
           for (c in 1:2) {
               x_hat[c]  = rep_matrix(-1, n_studies, n_thr);
@@ -551,25 +506,25 @@ generated quantities {
           }
           //// Calculate summary accuracy (using mean parameters):
           for (k in 1:n_thr) {
-                Fp_MED[k] =   1.0 - Phi(C_MED[1, k] - beta_mu[1]);
-                Sp_MED[k] =   1.0 - Fp_MED[k];
-                Se_MED[k] =   1.0 - Phi(C_MED[1, k] - beta_mu[2]);
+                // Fp_MED[k] =   1.0 - Phi(C_MED[1, k] - beta_mu[1]);
+                // Sp_MED[k] =   1.0 - Fp_MED[k];
+                // Se_MED[k] =   1.0 - Phi(C_MED[1, k] - beta_mu[2]);
                 ////
-                Fp_MU[k] =   1.0 - Phi(C_MU[1, k] - beta_mu[1]);
+                Fp_MU[k] =   1.0 - Phi(C_MU[k] - beta_mu[1]);
                 Sp_MU[k] =   1.0 - Fp_MU[k];
-                Se_MU[k] =   1.0 - Phi(C_MU[1, k] - beta_mu[2]);
+                Se_MU[k] =   1.0 - Phi(C_MU[k] - beta_mu[2]);
                 ////
                 Fp_EMP[k] =   1.0 - Phi(C_mu_empirical[1, k] - beta_mu[1]);
                 Sp_EMP[k] =   1.0 - Fp_EMP[k];
                 Se_EMP[k] =   1.0 - Phi(C_mu_empirical[1, k] - beta_mu[2]);
-                ////
-                Fp_SIM_MED[k] =   1.0 - Phi(C_SIM_medians[1, k] - beta_mu[1]);
-                Sp_SIM_MED[k] =   1.0 - Fp_SIM_MED[k];
-                Se_SIM_MED[k] =   1.0 - Phi(C_SIM_medians[1, k] - beta_mu[2]);
-                ////
-                Fp_SIM_MU[k] =   1.0 - Phi(C_SIM_means[1, k] - beta_mu[1]);
-                Sp_SIM_MU[k] =   1.0 - Fp_SIM_MU[k];
-                Se_SIM_MU[k] =   1.0 - Phi(C_SIM_means[1, k] - beta_mu[2]);
+                // ////
+                // Fp_SIM_MED[k] =   1.0 - Phi(C_SIM_medians[1, k] - beta_mu[1]);
+                // Sp_SIM_MED[k] =   1.0 - Fp_SIM_MED[k];
+                // Se_SIM_MED[k] =   1.0 - Phi(C_SIM_medians[1, k] - beta_mu[2]);
+                // ////
+                // Fp_SIM_MU[k] =   1.0 - Phi(C_SIM_means[1, k] - beta_mu[1]);
+                // Sp_SIM_MU[k] =   1.0 - Fp_SIM_MU[k];
+                // Se_SIM_MU[k] =   1.0 - Phi(C_SIM_means[1, k] - beta_mu[2]);
                 ////
                 Fp[k] = Fp_MED[k];
                 Sp[k] = Sp_MED[k];
@@ -579,9 +534,9 @@ generated quantities {
           {
                 vector[2] beta_pred =  to_vector(multi_normal_cholesky_rng(beta_mu, beta_L_Sigma));
                 for (k in 1:n_thr) {
-                      Fp_pred[k] =   1.0 - Phi(C_MU[1, k] - beta_pred[1]);
+                      Fp_pred[k] =   1.0 - Phi(C_MU[k] - beta_pred[1]);
                       Sp_pred[k] =   1.0 - Fp_pred[k];
-                      Se_pred[k] =   1.0 - Phi(C_MU[1, k] - beta_pred[2]);
+                      Se_pred[k] =   1.0 - Phi(C_MU[k] - beta_pred[2]);
                 }
           }
           //// Model-predicted ("re-constructed") data:

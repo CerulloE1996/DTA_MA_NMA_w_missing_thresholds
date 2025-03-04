@@ -57,7 +57,7 @@ functions {
                 return (1.0 / (sigma * sqrt_2_pi)) .* exp(-0.5 * ((x - mu) ./ sigma)^2);
           
         }
-              //// Induced-Dirichlet ("ind_dir") log-density function:
+        //// Induced-Dirichlet ("ind_dir") log-density function:
         //// NOTE: You can use this for both ind_dir PRIORS and ind_dir MODELS:
         real induced_dirichlet_v2_lpdf(  vector p_ord,
                                          vector rho,
@@ -126,8 +126,6 @@ data {
         array[2] matrix[n_studies, n_thr] cutpoint_index;
         //// Priors:
         vector<lower=0>[n_thr + 1] prior_alpha; // Induced-Dirichlet prior vector 
-        vector<lower=0.0>[2] prior_kappa_mean;
-        vector<lower=0.0>[2] prior_kappa_SD;
         vector[2] prior_beta_mu_mean;
         vector[2] prior_beta_mu_SD;
         vector[2] prior_beta_SD_mean;
@@ -136,7 +134,6 @@ data {
         vector[2] prior_log_scale_mu_SD;
         vector[2] prior_log_scale_SD_mean;
         vector[2] prior_log_scale_SD_SD;
-        array[2] vector[n_thr + 1] prior_dirichlet_phi;
         //// Other:
         int prior_only;
         int estimate_scales;
@@ -149,8 +146,7 @@ data {
 transformed data { 
     
         int n_cat = n_thr + 1; //// Number of ordinal categories for index test
-        int n_sets_of_cutpoints = 1;
-        real alpha_lb = exp(log_alpha_lb);
+        // int n_sets_of_cutpoints = 1;
         
 }
   
@@ -163,9 +159,13 @@ parameters {
         matrix[2, n_studies] beta_z;    // Study-specific random effects for beta (off-centered parameterisation)
         cholesky_factor_corr[2] beta_L_Omega;
         ////
-        vector[n_thr] unc_C_normal_MU;  // Population median of raw parameters
-        vector<lower=0.0>[n_thr] unc_C_normal_SD;  // Population SD of raw parameters
-        matrix[n_studies, n_thr] unc_C_normal;
+        vector[n_thr - 1] raw_MU;
+        vector<lower=0.0>[n_thr - 1] raw_SD;
+        matrix[n_studies, n_thr - 1] raw; // (1 + exp(inc)) ~ lognormal(mu, sigma);
+        ////
+        vector[n_studies] first_C;
+        real first_C_MU;
+        real<lower=0.0> first_C_SD;
         
 }
 
@@ -180,91 +180,57 @@ transformed parameters {
         array[2] matrix[n_studies, n_thr] cond_prob;   // Ordinal probs for the likelihood
         array[2] matrix[n_studies, n_thr] log_lik;     // log_lik storage
         ////
-        array[n_sets_of_cutpoints] vector[n_thr] Ind_Dir_cumul;
-        array[n_sets_of_cutpoints] vector[n_thr] Ind_Dir_cumul_prob;
-        array[n_sets_of_cutpoints] vector[n_cat] Ind_Dir_ord_prob;
+        vector[n_thr] Ind_Dir_cumul;
+        vector[n_thr] Ind_Dir_cumul_prob;
+        vector[n_cat] Ind_Dir_ord_prob;
         ////
-        ////  matrix[n_studies, n_thr] unc_C_normal;
-        array[n_sets_of_cutpoints] matrix[n_studies, n_thr] C;
-        matrix[n_sets_of_cutpoints, n_thr] C_MU;   
-        matrix[n_sets_of_cutpoints, n_thr] C_MED;
-        vector[n_thr] trans_C_MU;
-        vector[n_thr] trans_C_MED;
-        matrix[n_studies, n_thr] trans_C;
-        vector<lower=0.0>[n_thr] unc_C_normal_SD_sq = square(unc_C_normal_SD);
+        matrix[n_studies, n_thr] C;
+        vector[n_thr] C_MU;   
+        // matrix[n_sets_of_cutpoints, n_thr] C_MED;
         real Jacobian_for_unc_C_to_trans_C_MU = 0.0;
         real Jacobian_for_unc_C_to_trans_C = 0.0;
         //// 
-        //// study-specific cutpoints (construct study-specific trans_C and then study-specific cutpoints)
-        //// 
-        // First cutpoint is unconstrained:
+        vector<lower=0.0>[n_thr - 1] inc_MU;
+        ////
+        // vector[n_thr - 1] exp_raw_p1_MU;
+        // vector<lower=0.0>[n_thr - 1] exp_raw_p1_SD;
+        // matrix[n_studies, n_thr - 1] exp_raw_p1; /// = exp(raw) + 1.0;
+        matrix<lower=0.0>[n_studies, n_thr - 1] inc; //// = log1p_exp(raw);/// exp(raw) + 1.0; 
+        
+        ////
         for (s in 1:n_studies) {
-            C[1][s, 1] = unc_C_normal[s, 1]; //// first_C_mu + softplus_SD[1] * softplus_z[s, 1];  ///// unc_C_normal[s, 1] ~ normal(unc_C_normal_MU[1], unc_C_normal_SD[1]);
-            trans_C[s, 1] = unc_C_normal[s, 1];
+              C[s, 1] = first_C[s];
+              for (k in 1:(n_thr - 1)) {
+                 // exp_raw_p1[s, k] = exp(raw[s, k]) + 1.0;
+                 // Jacobian_for_unc_C_to_trans_C_MU += raw[s, k];
+                 inc[s, k] = log1p_exp(raw[s, k]); ////  inc[s, k] = log(exp_raw_p1[s, k]);
+                 Jacobian_for_unc_C_to_trans_C_MU += -log(exp(raw[s, k]) + 1.0); // Jacobian for exp_inc_m1 -> inc transformation. 
+                 //// Construct C:
+                 C[s, k + 1] = C[s, k] + inc[s, k]; //// No Jacobian as inc -> C is linear transformation.
+              }
         }
-        // Subsequent cutpoints:
-        {
-              //// ---- For constructing each study-specific trans_C just in terms of unc_C_normal[s, k]:
-              ////
-              trans_C[, 2:n_thr] = log1p_exp(unc_C_normal[, 2:n_thr]);
-              //// deriv of trans_C w.r.t unc_C_normal:
-              Jacobian_for_unc_C_to_trans_C +=  sum(log_inv_logit(unc_C_normal[, 2:n_thr]));
-              // // //// deriv of unc_C_normal w.r.t unc_C_normal_MU, unc_C_normal_SD and unc_C_normal_z:
-              // // Jacobian_for_unc_C_to_trans_C += 0.0;
-              // // Jacobian_for_unc_C_to_trans_C += log(sum(abs(unc_C_normal_z[, 2:n_thr])));
-              // // Jacobian_for_unc_C_to_trans_C += log(sum(abs(unc_C_normal_SD[2:n_thr])));
-              ////
-              // //// ---- For constructing each study-specific trans_C in terms of unc_C_normal[s, k] AND ALSO in terms of unc_C_normal_SD[k]:
-              // matrix[n_studies, n_thr] unc_C_normal_SD_sq_mat;
-              // for (s in 1:n_studies) {
-              //     unc_C_normal_SD_sq_mat[s, ] = to_row_vector(unc_C_normal_SD_sq);
-              // }
-              // trans_C[, 2:n_thr]  = log1p_exp(unc_C_normal[, 2:n_thr] + 0.5 * unc_C_normal_SD_sq_mat[, 2:n_thr]);
-              // //// deriv of trans_C w.r.t unc_C_normal:
-              // Jacobian_for_unc_C_to_trans_C += sum(log_inv_logit(unc_C_normal[, 2:n_thr]));
-              // // //// deriv of unc_C_normal w.r.t unc_C_normal_MU, unc_C_normal_SD and unc_C_normal_z:
-              // // Jacobian_for_unc_C_to_trans_C += 0.0;
-              // // Jacobian_for_unc_C_to_trans_C += log(sum(abs(unc_C_normal_z[, 2:n_thr])));
-              // // Jacobian_for_unc_C_to_trans_C += log(sum(abs(unc_C_normal_SD[2:n_thr])));
-              // //// deriv of trans_C w.r.t unc_C_normal_SD:
-              // Jacobian_for_unc_C_to_trans_C += n_studies*log(sum(abs(unc_C_normal_SD[2:n_thr])));
-        }
-        //// Then construct C from trans_C:
-        for (k in 2:n_thr) {
-            for (s in 1:n_studies) {
-                C[1][s, k] = C[1][s, k - 1] + trans_C[s, k]; // No Jacobian needed for transformation trans_C -> C
-            }
-        }
-        ////
-        //// construct positive-constrained trans_C_MU (SUMMARY) params:
-        ////
-        trans_C_MED[1] = unc_C_normal_MU[1]; // first cutpoint is unconstrained
-        trans_C_MU[1]  = unc_C_normal_MU[1]; // first cutpoint is unconstrained
-        //// 
-        for (k in 2:n_thr) {
-            real stuff_to_softplus =   unc_C_normal_MU[k] + 0.5 * unc_C_normal_SD_sq[k];
-            trans_C_MU[k]  = log1p_exp(unc_C_normal_MU[k] + 0.5 * unc_C_normal_SD_sq[k]);
-            // real stuff_to_softplus = unc_C_normal_MU[k];
-            trans_C_MED[k] =  log1p_exp(unc_C_normal_MU[k]);
-            //// deriv of trans_C_MU w.r.t unc_C_normal_MU:
-            //// deriv of trans_C_MU[k]  = exp(stuff_to_softplus) w.r.t  unc_C_normal_MU is:
-            //// exp(stuff_to_softplus) * deriv_of_correction_wrt_unc_C_normal_MU = exp(stuff_to_softplus) * 1;
-            Jacobian_for_unc_C_to_trans_C_MU += log_inv_logit(stuff_to_softplus);  //// deriv of trans_C_MU w.r.t unc_C_normal_MU
-            // //// deriv of trans_C_MU w.r.t unc_C_normal_SD:
-            // real log_abs_deriv_of_correction_wrt_SD =  log(abs(unc_C_normal_SD[k]));
-            // Jacobian_for_unc_C_to_trans_C_MU += log_inv_logit(stuff_to_softplus) + log_abs_deriv_of_correction_wrt_SD;  
-            // //// Jacobian_for_MU_to_MED += log_inv_logit(unc_C_normal_MU[k]); //// since derivative of log1p_exp is inv_logit!
+        for (k in 1:(n_thr - 1)) {
+            inc_MU[k] =  log1p_exp(raw_MU[k]);
         }
         ////
         //// Summary cutpoints:
         ////
         // First cutpoint is directly parameterized:
-        C_MED[1, 1] = trans_C_MED[1];
-        C_MU[1, 1]  = trans_C_MU[1];
+        // C_MED[1, 1] = first_C_MU;
+        C_MU[1]  = first_C_MU;
         for (k in 2:n_thr) {
-                C_MED[1, k] = C_MED[1, k - 1] + trans_C_MED[k]; // No Jacobian needed for transformation trans_C_MU -> C_MED
-                C_MU[1, k]  = C_MU[1, k - 1]  + trans_C_MU[k]; // No Jacobian needed for transformation trans_C_MU -> C_MED
+                C_MU[k]  = C_MU[k - 1]  + inc_MU[k - 1]; // No Jacobian needed for transformation trans_C_MU -> C_MED
         }
+        
+        
+        // for (s in 1:n_studies) {
+        //     first_C[s] ~ normal(first_C_MU, first_C_SD);
+        // }
+        // for (s in 1:n_studies) {
+        //    to_vector(raw[s, ]) ~ normal(raw_MU, raw_SD);
+        // }
+        
+        
         //// Initialise matrices:
         ////
         for (c in 1:2) {
@@ -273,10 +239,10 @@ transformed parameters {
                  cond_prob[c]          = rep_matrix(1.0, n_studies, n_thr);
                  log_lik[c]            = rep_matrix(0.0, n_studies, n_thr);
         }
-        for (c in 1:n_sets_of_cutpoints) {
-                 Ind_Dir_cumul[c]      = rep_vector(0.0, n_thr);
-                 Ind_Dir_cumul_prob[c] = rep_vector(0.0, n_thr);
-                 Ind_Dir_ord_prob[c]   = rep_vector(0.0, n_cat);
+        {
+                 Ind_Dir_cumul      = rep_vector(0.0, n_thr);
+                 Ind_Dir_cumul_prob = rep_vector(0.0, n_thr);
+                 Ind_Dir_ord_prob   = rep_vector(0.0, n_cat);
         }
         ////
         //// Between-study model for the location parameters ("beta") - models between-study correlation:
@@ -288,19 +254,18 @@ transformed parameters {
         ////
         //// Induced-Dirichlet model cumulative probs:
         ////
-        for (c in 1:n_sets_of_cutpoints) {
+        {
                 for (k in 1:n_thr) {
-                         //// Ind_Dir_cumul[c][k] = (C_MED[1, k] - 0.0);
-                         Ind_Dir_cumul[c][k] = (C_MU[1, k] - 0.0);
+                         Ind_Dir_cumul[k] = (C_MU[k] - 0.0);
                 }
-                Ind_Dir_cumul_prob[c] = Phi(Ind_Dir_cumul[c]); /// NaN here ???
+                Ind_Dir_cumul_prob = Phi(Ind_Dir_cumul); /// NaN here ???
                 {
                     //// Induced-Dirichlet ordinal probs:
-                    Ind_Dir_ord_prob[c][1] = Ind_Dir_cumul_prob[c][1] - 0.0;
+                    Ind_Dir_ord_prob[1] = Ind_Dir_cumul_prob[1] - 0.0;
                     for (k in 2:n_thr) {
-                       Ind_Dir_ord_prob[c][k] = Ind_Dir_cumul_prob[c][k] - Ind_Dir_cumul_prob[c][k - 1]; // since cutpoints are increasing with k
+                       Ind_Dir_ord_prob[k] = Ind_Dir_cumul_prob[k] - Ind_Dir_cumul_prob[k - 1]; // since cutpoints are increasing with k
                     }
-                    Ind_Dir_ord_prob[c][n_cat] = 1.0 - Ind_Dir_cumul_prob[c][n_cat - 1];
+                    Ind_Dir_ord_prob[n_cat] = 1.0 - Ind_Dir_cumul_prob[n_cat - 1];
                 }
         }
         ////
@@ -310,7 +275,7 @@ transformed parameters {
                   for (c in 1:2) {
                       for (cut_i in 1:to_int(n_cutpoints[c, s])) {
                              int k = to_int(cutpoint_index[c][s, cut_i]);
-                             logit_cumul_prob[c][s, cut_i] = (C[1][s, k] - beta[c, s]);
+                             logit_cumul_prob[c][s, cut_i] = (C[s, k] - beta[c, s]);
                       }
                   }
         }
@@ -364,15 +329,18 @@ model {
             beta_L_Omega ~ lkj_corr_cholesky(2.0);
         }
         //// Cutpoint priors:
-        unc_C_normal_MU[1] ~ normal(0, 2.5);
-        unc_C_normal_SD[1] ~ normal(0, 2.5);
+        first_C_MU ~ normal(0.0, 5.0);
+        first_C_SD ~ normal(0.0, 5.0);
+        // exp_inc_m1_MU ~ normal(0, 5.0);
+        // exp_inc_m1_SD ~ normal(0, 5.0);
         // unc_C_normal_SD[2:n_thr] ~ normal(0, 2.5); //// need this prior if parameterising summary cutpoints in terms of MEDIANS of unc_C (NOT means). 
         ////
         ////
         for (s in 1:n_studies) {
-            for (k in 1:n_thr) {
-                unc_C_normal[s, k] ~ normal(unc_C_normal_MU[k], unc_C_normal_SD[k]);
-            }
+            first_C[s] ~ normal(first_C_MU, first_C_SD);
+        }
+        for (s in 1:n_studies) {
+           to_vector(raw[s, ]) ~ normal(raw_MU, raw_SD);
         }
         ////
         //// Jacobian adjustment for transforming from unc_C -> C
@@ -382,9 +350,9 @@ model {
         ////
         //// Cutpoint between study model:
         ////
-        for (c in 1:n_sets_of_cutpoints) {
-            vector[n_thr] rho =  normal_pdf(to_vector(Ind_Dir_cumul[c][1:n_thr]), 0.0, 1.0);   //  p_cumul[k - 1] * (1.0 - p_cumul[k - 1]); // original
-            target += induced_dirichlet_v2_lpdf(to_vector(Ind_Dir_ord_prob[c][1:n_cat]) | rho, prior_alpha);
+        {
+            vector[n_thr] rho =  normal_pdf(to_vector(Ind_Dir_cumul[1:n_thr]), 0.0, 1.0);   //  p_cumul[k - 1] * (1.0 - p_cumul[k - 1]); // original
+            target += induced_dirichlet_v2_lpdf(to_vector(Ind_Dir_ord_prob[1:n_cat]) | rho, prior_alpha);
         }
         ////
         //// Likelihood / Model:
@@ -412,9 +380,9 @@ generated quantities {
           vector[n_thr] Sp;
           vector[n_thr] Se;
           ////
-          vector[n_thr] Fp_MED;
-          vector[n_thr] Sp_MED;
-          vector[n_thr] Se_MED;
+          // vector[n_thr] Fp_MED;
+          // vector[n_thr] Sp_MED;
+          // vector[n_thr] Se_MED;
           ////
           vector[n_thr] Fp_MU;
           vector[n_thr] Sp_MU;
@@ -445,41 +413,41 @@ generated quantities {
           matrix[n_studies, n_thr] dev_d    = rep_matrix(-1, n_studies, n_thr);
           array[2] matrix[n_studies, n_thr] x_hat;
           array[2] matrix[n_studies, n_thr] dev;
-          matrix[n_sets_of_cutpoints, n_thr] C_mu_empirical; 
+          vector[n_thr] C_mu_empirical; 
           corr_matrix[2] beta_Omega;
           ////
           //// Compute between-study correlation matrix for location parameters:
           beta_Omega  =  multiply_lower_tri_self_transpose(beta_L_Omega);
           ////
-          matrix[n_sets_of_cutpoints, n_thr] C_SIM_medians;  
-          matrix[n_sets_of_cutpoints, n_thr] C_SIM_means;
-          matrix[n_sets_of_cutpoints, n_thr] trans_C_medians; 
-          matrix[n_sets_of_cutpoints, n_thr] trans_C_means; 
+          vector[n_thr] C_SIM_medians;  
+          vector[n_thr] C_SIM_means;
+          vector[n_thr] trans_C_medians; 
+          vector[n_thr] trans_C_means; 
                      
-          //// Summary cutpoints:
-          {
-            int n_sims = 1000;
-            matrix[n_sims, n_thr] C_sim;
-            matrix[n_sims, n_thr] trans_C_sim;
-            for (i in 1:n_sims) {
-                     C_sim[i, 1] = normal_rng(unc_C_normal_MU[1], unc_C_normal_SD[1]);
-                     trans_C_sim[i, 1] = C_sim[i, 1];
-                     // Subsequent cutpoints:
-                     for (k in 2:n_thr) {
-                            real unc_C_normal_sim = normal_rng(unc_C_normal_MU[k], unc_C_normal_SD[k]);
-                            trans_C_sim[i, k] = log1p_exp(unc_C_normal_sim);
-                            C_sim[i, k] = C_sim[i, k - 1] + trans_C_sim[i, k];
-                     }
-            }
-
-            // Compute summary cutpoints as medians:
-            for (k in 1:n_thr) {
-                trans_C_medians[1, k] = median(trans_C_sim[, k]);
-                trans_C_means[1, k]   = mean(trans_C_sim[, k]);
-                C_SIM_medians[1, k] = median(C_sim[, k]);
-                C_SIM_means[1, k]   = mean(C_sim[, k]);
-            }
-          }
+          // //// Summary cutpoints:
+          // {
+          //   int n_sims = 1000;
+          //   matrix[n_sims, n_thr] C_sim;
+          //   matrix[n_sims, n_thr] trans_C_sim;
+          //   for (i in 1:n_sims) {
+          //            C_sim[i, 1] = normal_rng(unc_C_normal_MU[1], unc_C_normal_SD[1]);
+          //            trans_C_sim[i, 1] = C_sim[i, 1];
+          //            // Subsequent cutpoints:
+          //            for (k in 2:n_thr) {
+          //                   real unc_C_normal_sim = normal_rng(unc_C_normal_MU[k], unc_C_normal_SD[k]);
+          //                   trans_C_sim[i, k] = log1p_exp(unc_C_normal_sim);
+          //                   C_sim[i, k] = C_sim[i, k - 1] + trans_C_sim[i, k];
+          //            }
+          //   }
+          // 
+          //   // Compute summary cutpoints as medians:
+          //   for (k in 1:n_thr) {
+          //       trans_C_medians[1, k] = median(trans_C_sim[, k]);
+          //       trans_C_means[1, k]   = mean(trans_C_sim[, k]);
+          //       C_SIM_medians[1, k] = median(C_sim[, k]);
+          //       C_SIM_means[1, k]   = mean(C_sim[, k]);
+          //   }
+          // }
 
           //// Initialise containers:
           for (c in 1:2) {
@@ -488,9 +456,9 @@ generated quantities {
           }
           ////
           //// Empirical-mean cutpoints:
-          for (c in 1:n_sets_of_cutpoints) {
+          {
               for (k in 1:n_thr) {
-                    C_mu_empirical[c, k] = median(C[c][, k]);
+                    C_mu_empirical[k] = median(C[, k]);
               }
           }
           ////
@@ -504,37 +472,37 @@ generated quantities {
           }
           //// Calculate summary accuracy (using mean parameters):
           for (k in 1:n_thr) {
-                Fp_MED[k] =   1.0 - Phi(C_MED[1, k] - beta_mu[1]);
-                Sp_MED[k] =   1.0 - Fp_MED[k];
-                Se_MED[k] =   1.0 - Phi(C_MED[1, k] - beta_mu[2]);
+                // Fp_MED[k] =   1.0 - Phi(C_MED[k] - beta_mu[1]);
+                // Sp_MED[k] =   1.0 - Fp_MED[k];
+                // Se_MED[k] =   1.0 - Phi(C_MED[k] - beta_mu[2]);
                 ////
-                Fp_MU[k] =   1.0 - Phi(C_MU[1, k] - beta_mu[1]);
+                Fp_MU[k] =   1.0 - Phi(C_MU[k] - beta_mu[1]);
                 Sp_MU[k] =   1.0 - Fp_MU[k];
-                Se_MU[k] =   1.0 - Phi(C_MU[1, k] - beta_mu[2]);
+                Se_MU[k] =   1.0 - Phi(C_MU[k] - beta_mu[2]);
                 ////
-                Fp_EMP[k] =   1.0 - Phi(C_mu_empirical[1, k] - beta_mu[1]);
+                Fp_EMP[k] =   1.0 - Phi(C_mu_empirical[k] - beta_mu[1]);
                 Sp_EMP[k] =   1.0 - Fp_EMP[k];
-                Se_EMP[k] =   1.0 - Phi(C_mu_empirical[1, k] - beta_mu[2]);
+                Se_EMP[k] =   1.0 - Phi(C_mu_empirical[k] - beta_mu[2]);
+                // ////
+                // Fp_SIM_MED[k] =   1.0 - Phi(C_SIM_medians[1, k] - beta_mu[1]);
+                // Sp_SIM_MED[k] =   1.0 - Fp_SIM_MED[k];
+                // Se_SIM_MED[k] =   1.0 - Phi(C_SIM_medians[1, k] - beta_mu[2]);
+                // ////
+                // Fp_SIM_MU[k] =   1.0 - Phi(C_SIM_means[1, k] - beta_mu[1]);
+                // Sp_SIM_MU[k] =   1.0 - Fp_SIM_MU[k];
+                // Se_SIM_MU[k] =   1.0 - Phi(C_SIM_means[1, k] - beta_mu[2]);
                 ////
-                Fp_SIM_MED[k] =   1.0 - Phi(C_SIM_medians[1, k] - beta_mu[1]);
-                Sp_SIM_MED[k] =   1.0 - Fp_SIM_MED[k];
-                Se_SIM_MED[k] =   1.0 - Phi(C_SIM_medians[1, k] - beta_mu[2]);
-                ////
-                Fp_SIM_MU[k] =   1.0 - Phi(C_SIM_means[1, k] - beta_mu[1]);
-                Sp_SIM_MU[k] =   1.0 - Fp_SIM_MU[k];
-                Se_SIM_MU[k] =   1.0 - Phi(C_SIM_means[1, k] - beta_mu[2]);
-                ////
-                Fp[k] = Fp_MED[k];
-                Sp[k] = Sp_MED[k];
-                Se[k] = Se_MED[k];
+                Fp[k] = Fp_MU[k];
+                Sp[k] = Sp_MU[k];
+                Se[k] = Se_MU[k];
           }
           //// Calculate predictive accuracy:
           {
                 vector[2] beta_pred =  to_vector(multi_normal_cholesky_rng(beta_mu, beta_L_Sigma));
                 for (k in 1:n_thr) {
-                      Fp_pred[k] =   1.0 - Phi(C_MU[1, k] - beta_pred[1]);
+                      Fp_pred[k] =   1.0 - Phi(C_MU[k] - beta_pred[1]);
                       Sp_pred[k] =   1.0 - Fp_pred[k];
-                      Se_pred[k] =   1.0 - Phi(C_MU[1, k] - beta_pred[2]);
+                      Se_pred[k] =   1.0 - Phi(C_MU[k] - beta_pred[2]);
                 }
           }
           //// Model-predicted ("re-constructed") data:

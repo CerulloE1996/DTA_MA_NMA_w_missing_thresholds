@@ -86,17 +86,16 @@ data {
       array[2] matrix[n_studies, n_thr] n;
       array[2] matrix[n_studies, n_thr] x;
       array[2] matrix[n_studies, n_thr] cutpoint_index;
-      vector[n_thr] cts_thr_values_nd; // = logit(cts_thr_values_nd);   // Global cutpoints 
-      vector[n_thr] cts_thr_values_d; //  = logit(cts_thr_values_d);    // Global cutpoints
+      vector[n_thr] cts_thr_values;
       //// Priors:
       vector[2] prior_beta_mu_mean;
       vector[2] prior_beta_mu_SD;
       vector[2] prior_beta_SD_mean;
       vector[2] prior_beta_SD_SD;
-      vector[2] prior_log_scale_mu_mean;
-      vector[2] prior_log_scale_mu_SD;
-      vector[2] prior_log_scale_SD_mean;
-      vector[2] prior_log_scale_SD_SD;
+      vector[2] prior_raw_scale_mu_mean;
+      vector[2] prior_raw_scale_mu_SD;
+      vector[2] prior_raw_scale_SD_mean;
+      vector[2] prior_raw_scale_SD_SD;
       //// Other:
       int prior_only;
       int use_box_cox;
@@ -120,12 +119,12 @@ parameters {
       matrix[2, n_studies] beta_z;    // Study-specific random effects for beta (off-centered parameterisation)
       cholesky_factor_corr[2] beta_L_Omega;
       ////
-      vector[2] log_scale_mu;    
-      vector<lower=0.0>[2] log_scale_SD;   
-      matrix[2, n_studies] log_scale_z;    // Study-specific random effects for beta (off-centered parameterisation)
-      cholesky_factor_corr[2] log_scale_L_Omega;
+      vector[2] raw_scale_mu;    
+      vector<lower=0.0>[2] raw_scale_SD;   
+      matrix[2, n_studies] raw_scale_z;    // Study-specific random effects for beta (off-centered parameterisation)
+      cholesky_factor_corr[2] raw_scale_L_Omega;
       ////
-      vector<lower=-5.0, upper = 5.0>[2] lambda;   // box-cox params
+      real<lower=-5.0, upper = 5.0> lambda;   // box-cox params
   
 }
 
@@ -134,7 +133,7 @@ transformed parameters {
   
         //// Construct the study-specific random effects (off-centered param.):
         matrix[2, n_studies] beta;
-        matrix[2, n_studies] log_scale;
+        matrix[2, n_studies] raw_scale;
         matrix[2, n_studies] scale;
         ////
         array[2] matrix[n_studies, n_thr] logit_cumul_prob; // Ordinal probs for the likelihood
@@ -142,7 +141,7 @@ transformed parameters {
         array[2] matrix[n_studies, n_thr] cond_prob;  // Ordinal probs for the likelihood
         array[2] matrix[n_studies, n_thr] log_lik;  // log_lik storage
         ////
-        matrix[2, n_thr] C;
+        vector[n_thr] C;
       
         //// Initialise matrices:
         for (c in 1:2) {
@@ -153,21 +152,19 @@ transformed parameters {
         }
       
         if (use_box_cox == 0) {
-              C[1, ]  = to_row_vector(log(cts_thr_values_nd));
-              C[2, ]  = to_row_vector(log(cts_thr_values_d));
+              C  = log(cts_thr_values);
         } else { 
-              C[1, ]  = to_row_vector(box_cox(cts_thr_values_nd, lambda[1]));
-              C[2, ]  = to_row_vector(box_cox(cts_thr_values_d,  lambda[2]));
+              C  = box_cox(cts_thr_values, lambda);
         }
         
-        //// Between-study model for the location parameters ("beta") and the log_scale parameters - models between-study correlation:
+        //// Between-study model for the location parameters ("beta") and the raw_scale parameters - models between-study correlation:
         for (s in 1:n_studies) {
              beta[, s]      =  beta_mu      + diag_pre_multiply(beta_SD, beta_L_Omega) * beta_z[, s];
-             log_scale[, s] =  log_scale_mu + diag_pre_multiply(log_scale_SD, log_scale_L_Omega) * log_scale_z[, s];
+             raw_scale[, s] =  raw_scale_mu + diag_pre_multiply(raw_scale_SD, raw_scale_L_Omega) * raw_scale_z[, s];
         }
         
         for (c in 1:2) {
-            scale[c, ] = exp(log_scale[c, ]);
+            scale[c, ] = log1p_exp(raw_scale[c, ]);
         }
         ////
         //// Likelihood using binomial factorization:
@@ -176,7 +173,7 @@ transformed parameters {
                   for (c in 1:2) {
                       for (cut_i in 1:to_int(n_cutpoints[c, s])) {
                              int k = to_int(cutpoint_index[c][s, cut_i]);
-                             logit_cumul_prob[c][s, cut_i] = (C[c, k] - beta[c, s])/scale[c, s];
+                             logit_cumul_prob[c][s, cut_i] = (C[k] - beta[c, s])/scale[c, s];
                       }
                   }
         }
@@ -227,14 +224,15 @@ model {
         beta_mu ~ normal(prior_beta_mu_mean, prior_beta_mu_SD);
         beta_SD ~ normal(prior_beta_SD_mean, prior_beta_SD_SD);
         beta_L_Omega ~ lkj_corr_cholesky(2.0);
-        log_scale_mu ~ normal(prior_log_scale_mu_mean, prior_log_scale_mu_SD);
-        log_scale_SD ~ normal(prior_log_scale_SD_mean, prior_log_scale_SD_SD);
-        log_scale_L_Omega ~ lkj_corr_cholesky(2.0);
+        ////
+        raw_scale_mu ~ normal(prior_raw_scale_mu_mean, prior_raw_scale_mu_SD);
+        raw_scale_SD ~ normal(prior_raw_scale_SD_mean, prior_raw_scale_SD_SD);
+        raw_scale_L_Omega ~ lkj_corr_cholesky(2.0);
         
         //// Likelihood / Model:
         for (c in 1:2) {
              to_vector(beta_z[c, ]) ~ std_normal(); // (part of between-study model, NOT prior)
-             to_vector(log_scale_z[c, ]) ~ std_normal(); // (part of between-study model, NOT prior)
+             to_vector(raw_scale_z[c, ]) ~ std_normal(); // (part of between-study model, NOT prior)
         }
         
         //// For box-cox parameters:
@@ -242,9 +240,9 @@ model {
         
         //// Jacobian adjustments needed:
         { 
-            target += sum(log_scale);                // double-checked the log-derivative of this by hand (correct)
-            if (abs(sum(log_scale_SD)) != 0.0) target += log(abs(sum(log_scale_SD)));      // double-checked the log-derivative of this by hand (correct)
-            if (abs(sum(log_scale_z)) != 0.0)  target += log(abs(sum(log_scale_z)));  // double-checked the log-derivative of this by hand (correct)
+            target += sum(raw_scale);                // double-checked the log-derivative of this by hand (correct)
+            if (abs(sum(raw_scale_SD)) != 0.0) target += log(abs(sum(raw_scale_SD)));      // double-checked the log-derivative of this by hand (correct)
+            if (abs(sum(raw_scale_z)) != 0.0)  target += log(abs(sum(raw_scale_z)));  // double-checked the log-derivative of this by hand (correct)
         }
                     
         //// Likelihood using binomial factorization:
@@ -276,12 +274,12 @@ generated quantities {
           array[2] matrix[n_studies, n_thr] x_hat;
           array[2] matrix[n_studies, n_thr] dev;
           corr_matrix[2] beta_Omega;
-          corr_matrix[2] log_scale_Omega;
-          vector[2] scale_mu = exp(log_scale_mu);
+          corr_matrix[2] raw_scale_Omega;
+          vector[2] scale_mu = log1p_exp(raw_scale_mu);
           
           //// Compute between-study correlation matrices:
           beta_Omega       =  multiply_lower_tri_self_transpose(beta_L_Omega);
-          log_scale_Omega  =  multiply_lower_tri_self_transpose(log_scale_L_Omega);
+          raw_scale_Omega  =  multiply_lower_tri_self_transpose(raw_scale_L_Omega);
           
           //// Initialise containers:
           for (c in 1:2) {
@@ -300,9 +298,9 @@ generated quantities {
           
           //// Calculate summary accuracy (using mean parameters):
           for (k in 1:n_thr) {
-                Fp[k] =   Phi((beta_mu[1] - C[1, k])/exp(log_scale_mu[1]));
+                Fp[k] =   Phi((beta_mu[1] - C[k])/scale_mu[1]);
                 Sp[k] =   1.0 - Fp[k];
-                Se[k] =   Phi((beta_mu[2] - C[2, k])/exp(log_scale_mu[2]));
+                Se[k] =   Phi((beta_mu[2] - C[k])/scale_mu[2]);
           }
           
           //// Model-predicted ("re-constructed") data:

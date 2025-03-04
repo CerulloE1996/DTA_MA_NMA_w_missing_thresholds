@@ -134,6 +134,7 @@ parameters {
         ////
         array[n_studies] ordered[n_thr] C_nd;  // Global cutpoints
         simplex[n_cat] category_means;
+        ////
         real<lower=kappa_lb> kappa;  
         
 }
@@ -157,32 +158,23 @@ transformed parameters {
         matrix[n_studies, n_thr] C;
         vector[n_cat] alpha;
         real log_kappa = log(kappa);
+        ////
         real<lower=kappa_lb> precision = kappa; 
         real dispersion = 1.0 / precision;
         vector[n_cat] category_SDs;
-        real alpha_0;
-        real Jacobian_for_alpha_k_to_category_SDs = 0.0;
-        ////
-        //// Compute alpha:
-        ////
-        for (k in 1:n_cat) {
-             alpha[k] = exp(log_kappa + log(category_means[k]));
-        }
-        alpha_0 = sum(alpha);
+        real alpha_0 = sum(alpha);
         ////
         for (k in 1:n_cat) {
             // SD for each category probability in a Dirichlet is √(α_k(α_0-α_k)/(α_0^2(α_0+1)))
             // where α_0 is the sum of all alphas:
             category_SDs[k] = sqrt((alpha[k] * (alpha_0 - alpha[k])) / (alpha_0 * alpha_0 * (alpha_0 + 1.0)));
-            real var_k = square(category_SDs[k]);
-            real alpha_k_sq = square(alpha[k]);
-            real alpha_0_sq = square(alpha_0);
-            real alpha_0_cube = alpha_0_sq * alpha_0;
-            real deriv_A = alpha_k_sq + alpha_0 - 2.0*alpha[k];
-            real deriv_B = (1.0 / alpha[k]) * (3.0*alpha_0_sq*alpha[k] + 2.0*alpha[k]*alpha_0);
-            real deriv_var_k = deriv_A * (alpha_0_cube + alpha_0_sq) + deriv_B * (alpha[k]*alpha_0 - alpha_k_sq);
-            real deriv_SD_k = 0.5*var_k*deriv_var_k;
-            Jacobian_for_alpha_k_to_category_SDs += log(abs(deriv_SD_k));
+            Jacobian_for_alpha_k_to_category_SDs;
+        }
+        ////
+        //// Compute alpha:
+        ////
+        for (k in 1:n_cat) {
+             alpha[k] = exp(log_kappa + log(category_means[k]));
         }
         ////
         //// Initialise matrices:
@@ -290,9 +282,8 @@ model {
         }
         //// Induced-dirichlet between study ** model ** (NOT a prior model here but part of the actual likelihood since random-effect cutpoints!):
         {
-            //// target += normal_lpdf(kappa | prior_kappa_mean, prior_kappa_SD);
-            target += dirichlet_lpdf( category_means | prior_dirichlet_phi ); // "flat" prior on the simplex category_means. 
-            target += normal_lpdf(category_SDs | 0.0, 0.10);
+            target += normal_lpdf(kappa | prior_kappa_mean, prior_kappa_SD);
+            target += dirichlet_lpdf(category_means | prior_dirichlet_phi); // "flat" prior on the simplex category_means. 
         }
      
         {
@@ -306,7 +297,6 @@ model {
                   }
             }
         }
-        target += Jacobian_for_alpha_k_to_category_SDs;
         ////
         //// Likelihood / Model:
         {
@@ -361,11 +351,10 @@ generated quantities {
           }
           
           {
-
                 // Expected value of Dirichlet is proportional to alpha parameters:
                 vector[n_cat] expected_p_ord;
                 for (k in 1:n_cat) {
-                    expected_p_ord[k] = alpha[k] / sum(alpha);
+                    expected_p_ord[k] = alpha[k] / alpha_0;
                 }
 
                 // Calculate cumulative probabilities:
@@ -388,69 +377,6 @@ generated quantities {
           
                 }
           }
-          
-          // {
-          // 
-          //      array[n_sets_of_cutpoints] matrix[n_cat, n_sims] prob_ord_mu_sim;
-          //      array[n_sets_of_cutpoints] matrix[n_thr, n_sims] prob_cumul_mu_sim;
-          //      array[n_sets_of_cutpoints] matrix[n_thr, n_sims] C_mu_sim;
-          // 
-          //      for (c in 1:n_sets_of_cutpoints) {
-          //              for (i in 1:n_sims) {
-          // 
-          //                             // // //// Induced-Dirichlet ordinal probs are structured like this:
-          //                             //  Ind_Dir_cumul_prob[c] = Phi(C[c] - Ind_Dir_anchor[c]);
-          //                             //  for (s in 1:n_studies) {
-          //                             //          //// Induced-Dirichlet ordinal probs:
-          //                             //          Ind_Dir_ord_prob[c][s, 1] = Ind_Dir_cumul_prob[c][s, 1] - 0.0;
-          //                             //          for (k in 2:n_thr) {
-          //                             //             Ind_Dir_ord_prob[c][s, k] = Ind_Dir_cumul_prob[c][s, k] - Ind_Dir_cumul_prob[c][s, k - 1]; // since cutpoints are increasing with k
-          //                             //          }
-          //                             //          Ind_Dir_ord_prob[c][s, n_cat] = 1.0 - Ind_Dir_cumul_prob[c][s, n_cat - 1];
-          //                             //  }
-          //                             // Simulate from Dirichlet by using the summary "alpha" parameters:
-          //                             prob_ord_mu_sim[c][1:n_cat, i]   =  dirichlet_rng(to_vector(alpha[c, ]));
-          //                             ////
-          //                             //// Calculate cumulative probabilities:
-          //                             prob_cumul_mu_sim[c][1, i] = prob_ord_mu_sim[c][1, i];
-          //                             for (k in 2:n_thr) {
-          //                                 prob_cumul_mu_sim[c][k, i] = prob_cumul_mu_sim[c][k - 1, i] + prob_ord_mu_sim[c][k, i];
-          //                             }
-          //                             ////
-          //                             //// Transform to cutpoints:
-          //                             real anchor_for_summaries = 0.0;
-          //                             for (k in 1:n_thr) {
-          //                                   real prob_1;
-          //                                   if (prob_cumul_mu_sim[c][k, i] < 1e-38) { 
-          //                                         prob_1 = 1e-38;
-          //                                         C_mu_sim[c][k, i] = -10.0;
-          //                                   } else if (prob_cumul_mu_sim[c][k, i] > 0.9999999999999) { 
-          //                                         prob_1 = 0.9999999999999;
-          //                                         C_mu_sim[c][k, i] = +10.0;
-          //                                   } else {
-          //                                         prob_1 = inv_Phi(prob_cumul_mu_sim[c][k, i]);
-          //                                         C_mu_sim[c][k, i] = anchor_for_summaries + prob_1;
-          //                                   }
-          //                              
-          //                             }
-          // 
-          //              }
-          //      }
-          // 
-          // 
-          //      for (c in 1:n_sets_of_cutpoints) {
-          // 
-          //            for (k in 1:n_thr) {
-          //                prob_ord_mu[c, k] = median(prob_ord_mu_sim[c][k, 1:n_sims]);
-          //                C_mu[c, k]  = median(C_mu_sim[c][k, 1:n_sims]);
-          //                prob_cumul_mu[c, k] = median(prob_cumul_mu_sim[c][k, 1:n_sims]);
-          //            }
-          //            prob_ord_mu[c, n_cat] = median(prob_ord_mu_sim[c][n_cat, 1:n_sims]);
-          //            // prob_cumul_mu[c, n_cat] = median(prob_cumul_mu_sim[c][n_cat, ]);
-          // 
-          //      }
-          // 
-          // }
           ////
           //// Empirical-mean cutpoints:     
           {
