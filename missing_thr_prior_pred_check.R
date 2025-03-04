@@ -68,7 +68,8 @@ induced_Dirichlet_ppc_plot <- function(  method = "kappa",
                                     
                               }
                              
-                              phi <- MCMCpack::rdirichlet(N, prior_dirichlet_phi) 
+                              phi <- gtools::rdirichlet(N, prior_dirichlet_phi) 
+                         
                               log_phi <- log(phi)
                                     
                               for (i in 1:N) {
@@ -77,7 +78,7 @@ induced_Dirichlet_ppc_plot <- function(  method = "kappa",
                                     ## Compute alpha:
                                     alpha[,i] <- exp(log_alpha[,i])
                                     ##
-                                    res[,i] <- MCMCpack::rdirichlet(n = 1, alpha[,i])
+                                    res[,i] <- gtools::rdirichlet(n = 1, alpha[,i])
                                     
                               }
                      
@@ -100,7 +101,7 @@ induced_Dirichlet_ppc_plot <- function(  method = "kappa",
                                     #   
                                     # }
                                     
-                                    res[,i] <- MCMCpack::rdirichlet(n = 1, alpha[,i])
+                                    res[,i] <- gtools::rdirichlet(n = 1, alpha[,i])
                               
                             }
                             

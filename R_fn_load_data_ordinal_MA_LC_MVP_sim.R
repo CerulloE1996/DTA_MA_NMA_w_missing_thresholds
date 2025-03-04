@@ -517,57 +517,57 @@ apply_thr_missingness <- function(  agg_data_cumulative,
 
 # 
 # 
-# 
-# 
-# convert_cumulative_to_category <- function(cumulative_matrix, 
-#                                            missing_indicator = -1) {
-#   
-#   # Get dimensions and create output matrix with same dimensions plus one column
-#   n_rows <- nrow(cumulative_matrix)
-#   n_cols <- ncol(cumulative_matrix)
-#   category_matrix <- matrix(-1, nrow = n_rows, ncol = n_cols + 1)
-#   
-#   for (i in 1:n_rows) {
-#     # Get current row
-#     row_data <- cumulative_matrix[i, ]
-#     
-#     # First category is the first cumulative count
-#     category_matrix[i, 1] <- row_data[1]
-#     
-#     # Second category is second column minus first column
-#     if (n_cols >= 2) {
-#       if (!is.na(row_data[1]) && !is.na(row_data[2])) {
-#         category_matrix[i, 2] <- row_data[2] - row_data[1]
-#       }
-#     }
-#     
-#     # Process remaining categories by taking differences
-#     for (j in 2:(n_cols-1)) {
-#       if (!is.na(row_data[j]) && !is.na(row_data[j+1])) {
-#         category_matrix[i, j+1] <- row_data[j+1] - row_data[j]
-#       }
-#     }
-#     
-#     # Last category is the total minus the last cumulative count
-#     # (Assuming we want all categories to sum to the total)
-#     if (!is.na(row_data[n_cols])) {
-#       total <- row_data[n_cols]
-#       category_matrix[i, n_cols+1] <- 0  # Default to zero
-#       
-#       # If we want a true non-zero last category, we would need the actual total N
-#       # which isn't directly provided in this data format
-#     }
-#   }
-#   
-#   return(category_matrix[, 1:n_cols])
-#   
-# }
-# 
-# 
-# 
-# 
-# 
-# 
+
+
+convert_cumulative_to_category <- function(cumulative_matrix,
+                                           missing_indicator = -1) {
+
+  # Get dimensions and create output matrix with same dimensions plus one column
+  n_rows <- nrow(cumulative_matrix)
+  n_cols <- ncol(cumulative_matrix)
+  category_matrix <- matrix(-1, nrow = n_rows, ncol = n_cols + 1)
+
+  for (i in 1:n_rows) {
+    # Get current row
+    row_data <- cumulative_matrix[i, ]
+
+    # First category is the first cumulative count
+    category_matrix[i, 1] <- row_data[1]
+
+    # Second category is second column minus first column
+    if (n_cols >= 2) {
+      if (!is.na(row_data[1]) && !is.na(row_data[2])) {
+        category_matrix[i, 2] <- row_data[2] - row_data[1]
+      }
+    }
+
+    # Process remaining categories by taking differences
+    for (j in 2:(n_cols-1)) {
+      if (!is.na(row_data[j]) && !is.na(row_data[j+1])) {
+        category_matrix[i, j+1] <- row_data[j+1] - row_data[j]
+      }
+    }
+
+    # Last category is the total minus the last cumulative count
+    # (Assuming we want all categories to sum to the total)
+    if (!is.na(row_data[n_cols])) {
+      total <- row_data[n_cols]
+      category_matrix[i, n_cols+1] <- 0  # Default to zero
+
+      # If we want a true non-zero last category, we would need the actual total N
+      # which isn't directly provided in this data format
+    }
+  }
+
+  return(category_matrix[, 1:n_cols])
+
+}
+
+
+
+
+
+
 # 
 # 
 # 

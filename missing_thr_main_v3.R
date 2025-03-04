@@ -6,7 +6,31 @@
 
 setwd("/home/enzocerullo/Documents/Work/PhD_work/DTA_MA_NMA_w_missing_thresholds")
 
+setwd("/home/enzo/Documents/Work/PhD_work/DTA_MA_NMA_w_missing_thresholds")
+
 require(BayesMVP)
+require(TruncatedNormal)
+
+install.packages("TruncatedNormal")
+remotes::install_github("tylermorganwall/spacefillr")
+
+
+install.packages("spacefillr", 
+                 configure.args = "--with-include-dir=include",
+                 type = "source")
+
+Sys.setenv(CPPFLAGS = paste(Sys.getenv("CPPFLAGS"), "-I./include", sep = " "))
+Sys.setenv(CPPFLAGS = paste(Sys.getenv("CPPFLAGS"), "-I./inst/include", sep = " "))
+install.packages("spacefillr", type = "source")
+
+
+Sys.setenv(CXX="g++")
+Sys.setenv(CC="gcc")
+install.packages("MCMCpack")
+
+
+install.packages("/home/enzo/Downloads/spacefillr_download/spacefillr_fixed.tar.gz", repos = NULL, type = "source")
+
 
 source("R_fn_load_data_ordinal_MA_LC_MVP_sim.R")
 source("missing_thr_prep_Stan_data.R")
@@ -15,7 +39,7 @@ source("R_fn_compile_Stan_model.R")
 
 options(scipen = 999999999999)
 
-
+ 
 
 
 #### To overwrite some model options:
@@ -41,12 +65,12 @@ options(scipen = 999999999999)
     if (method == "kappa") {
       
             prior_kappa_mean <- 0
-            prior_kappa_SD <-   100
+            prior_kappa_SD <-   200
             prior_dirichlet_phi <- rep(1, n_cat)
             ##
-            Stan_data_list$prior_kappa_mean <-  rep(prior_kappa_mean, 2)
-            Stan_data_list$prior_kappa_SD <-    rep(prior_kappa_SD, 2)
-            Stan_data_list$prior_dirichlet_phi <- list( prior_dirichlet_phi, prior_dirichlet_phi)
+            Stan_data_list$prior_kappa_mean <-  rep(prior_kappa_mean, 1)
+            Stan_data_list$prior_kappa_SD <-    rep(prior_kappa_SD, 1)
+            Stan_data_list$prior_dirichlet_phi <- prior_dirichlet_phi
             ##
             kappa_lb <- 1
             Stan_data_list$log_alpha_lb <- log(kappa_lb)
@@ -59,8 +83,8 @@ options(scipen = 999999999999)
                                                              use_log_kappa = FALSE,
                                                              log_alpha_lb = Stan_data_list$log_alpha_lb,
                                                              log_alpha_ub = Stan_data_list$log_alpha_ub,
-                                                             prior_mean = Stan_data_list$prior_kappa_mean[1],
-                                                             prior_sd = Stan_data_list$prior_kappa_SD[1],
+                                                             prior_mean = Stan_data_list$prior_kappa_mean,
+                                                             prior_sd = Stan_data_list$prior_kappa_SD,
                                                              prior_dirichlet_phi =   prior_dirichlet_phi,
                                                              n_cat = n_cat,
                                                              N = 5000)
@@ -173,7 +197,7 @@ options(scipen = 999999999999)
 
 ## ---------  Note: models w/ "HOMOG" in name have the SAME set of cutpoints between the D+ and D- class. 
 ## Model_type <- "Jones_HOMOG_cutpoints" ## --------- WORKING
-# Model_type <- "Jones" ## --------- WORKING
+Model_type <- "Jones" ## --------- WORKING
 ## --------- Models w/ free + independent scale parameterss in D+ and D- groups:
 # Model_type <- "Cerullo_FIXED_HOMOG_cutpoints"
 Model_type <- "Cerullo_FIXED_cutpoints"
@@ -188,10 +212,15 @@ Model_type <- "Cerullo_RANDOM_cutpoints"
 # DTA_MA_Xu_RANDthr_SOFTP.stan
 # DTA_MA_Xu_RANDthr_LOGNORM.stan
 
+
+##
 # cutpoint_param <- "alpha"
-# cutpoint_param <- "kappa"
+ cutpoint_param <- "kappa"
+##
 # cutpoint_param <- "log_normal"
-cutpoint_param <- "softplus"
+##  cutpoint_param <- "softplus"
+
+
 
 
 
@@ -230,14 +259,24 @@ cutpoint_param <- "softplus"
              
                          Stan_init_list$C_nd <-   t(array(dim = c(n_thr, n_studies), data = seq(from = -2.0, to = 2.0, length = n_thr)))
                          Stan_init_list$C_d  <-   t(array(dim = c(n_thr, n_studies), data = seq(from = -2.0, to = 2.0, length = n_thr)))
-                         Stan_init_list$log_alpha <- (array(log(1.01), dim = c(n_sets_of_cutpoints, n_cat)))
-                         Stan_init_list$alpha <- (array(1.01,  dim = c(n_sets_of_cutpoints, n_cat)))
+                         Stan_init_list$log_alpha <- (array(log(1.01), dim = c(1, n_cat)))
+                         Stan_init_list$alpha <- (array(1.01,  dim = c(1, n_cat)))
                          ####
-                         Stan_init_list$unc_C_normal_z <-  array(0.001, dim = c(n_studies, n_thr))
-                         Stan_init_list$unc_C_normal_SD <- rep(0.001, n_thr)
-                         Stan_init_list$unc_C_normal_MU <- rep(-2, n_thr)
-                         Stan_init_list$unc_C_normal_MED <- rep(-2, n_thr)
-                         Stan_init_list$unc_C_normal <-  array(-2, dim = c(n_studies, n_thr))
+                         Stan_init_list$log_increment_z <-  array(0.001, dim = c(n_studies, n_thr - 1))
+                         Stan_init_list$log_increment_SD <- rep(0.001, n_thr - 1)
+                         Stan_init_list$log_increment_MU <- rep(-2, n_thr - 1)
+                         Stan_init_list$log_increment_MED <- rep(-2, n_thr - 1)
+                         Stan_init_list$increment <-  exp(array(-2, dim = c(n_studies, n_thr - 1)))
+                         Stan_init_list$inc <-      exp(array(0.10, dim = c(n_studies, n_thr - 1)))
+                         Stan_init_list$raw_inc <-  exp(array(-1.0, dim = c(n_studies, n_thr - 1)))
+                         Stan_init_list$first_C <- rep(-2, n_studies)
+                         Stan_init_list$C_MU <-   seq(from = -2.0, to = 2.0, length = n_thr)
+                         Stan_init_list$exp_inc_m1 <-      exp(array(0.10, dim = c(n_studies, n_thr - 1)))
+                         Stan_init_list$exp_inc_m1_MU <- rep(0.1, n_thr - 1)
+                         Stan_init_list$exp_inc_m1_SD <- rep(0.01, n_thr - 1)
+                         Stan_init_list$raw <-      array(0.01, dim = c(n_studies, n_thr - 1))
+                         ##
+                         Stan_init_list$phi <- c(rep(1/(n_thr + 1), n_thr + 1))
                          
                          if (cutpoint_param == "alpha") { 
                            
@@ -253,7 +292,8 @@ cutpoint_param <- "softplus"
                              
                          } else if (cutpoint_param == "softplus") { 
                            
-                             file <- file.path(getwd(), "stan_models", "DTA_MA_Xu_RANDthr_SOFTP.stan")
+                              file <- file.path(getwd(), "stan_models", "DTA_MA_Xu_RANDthr_SOFTP.stan")
+                              ## file <- file.path(getwd(), "stan_models", "DTA_MA_Xu_RANDthr_SOFTP2.stan")
                              
                          }
                        
@@ -305,7 +345,7 @@ cutpoint_param <- "softplus"
 
 
 
-## | ------  Run model - using Stan  ---------------------------------------------------------------------------------------------------------
+#### | ------  Run model - using Stan  ---------------------------------------------------------------------------------------------------------
 {
           
           seed <- 123
@@ -344,6 +384,7 @@ cutpoint_param <- "softplus"
           })
           
 }
+
 
 
 
@@ -521,22 +562,22 @@ cutpoint_param <- "softplus"
           Se_MU <- Stan_mod_sample$summary(c("Se_MU")) ##%>% print(n = 100)
           Se_MU <- Se_MU$mean
           true_Se_OVERALL - Se_MU*100
-          ##
-          Se_MED <- Stan_mod_sample$summary(c("Se_MED")) ##%>% print(n = 100)
-          Se_MED <- Se_MED$mean
-          true_Se_OVERALL - Se_MED*100
-          ##
+          # ##
+          # Se_MED <- Stan_mod_sample$summary(c("Se_MED")) ##%>% print(n = 100)
+          # Se_MED <- Se_MED$mean
+          # true_Se_OVERALL - Se_MED*100
+          # ##
           Se_EMP <- Stan_mod_sample$summary(c("Se_EMP")) ##%>% print(n = 100)
           Se_EMP <- Se_EMP$mean
           true_Se_OVERALL - Se_EMP*100
-          ##
-          Se_SIM_MED <- Stan_mod_sample$summary(c("Se_SIM_MED")) ##%>% print(n = 100)
-          Se_SIM_MED <- Se_SIM_MED$mean
-          true_Se_OVERALL - Se_SIM_MED*100
-          ##
-          Se_SIM_MU <- Stan_mod_sample$summary(c("Se_SIM_MU")) ##%>% print(n = 100)
-          Se_SIM_MU <- Se_SIM_MU$mean
-          true_Se_OVERALL - Se_SIM_MU*100
+          # ##
+          # Se_SIM_MED <- Stan_mod_sample$summary(c("Se_SIM_MED")) ##%>% print(n = 100)
+          # Se_SIM_MED <- Se_SIM_MED$mean
+          # true_Se_OVERALL - Se_SIM_MED*100
+          # ##
+          # Se_SIM_MU <- Stan_mod_sample$summary(c("Se_SIM_MU")) ##%>% print(n = 100)
+          # Se_SIM_MU <- Se_SIM_MU$mean
+          # true_Se_OVERALL - Se_SIM_MU*100
           ##
           true_Se_OVERALL
           true_Se_OVERALL[4:7]
@@ -554,13 +595,20 @@ cutpoint_param <- "softplus"
         })
         ##
         try({ 
-          Stan_mod_sample$summary(c("trans_C_medians")) %>% print(n = 100)
-          Stan_mod_sample$summary(c("trans_C_means")) %>% print(n = 100)
+          Stan_mod_sample$summary(c("C_MU")) %>% print(n = 100)
+          Stan_mod_sample$summary(c("C_SD")) %>% print(n = 100)
+          Stan_mod_sample$summary(c("C_empirical")) %>% print(n = 100)
         })
         ##
         # try({
         #   Stan_mod_sample$summary(c("unc_C_normal_SD_sq"))  %>% print(n = 100)
-        #   Stan_mod_sample$summary(c("unc_C_normal_SD"))  %>% print(n = 100)
+          Stan_mod_sample$summary(c("raw_MU"))  %>% print(n = 100)
+          Stan_mod_sample$summary(c("raw_SD"))  %>% print(n = 100)
+          Stan_mod_sample$summary(c("log_increment_SD"))  %>% print(n = 100)
+          ##
+          Stan_mod_sample$summary(c("category_SDs"))  %>% print(n = 100)
+          Stan_mod_sample$summary(c("category_SDs"))  %>% print(n = 100)
+          Stan_mod_sample$summary(c("category_SDs"))  %>% print(n = 100)
         # })
         # try({ 
         #   Stan_mod_sample$summary(c("C_mu_empirical"))  %>% print(n = 100)
@@ -596,6 +644,34 @@ cutpoint_param <- "softplus"
         
         
 }
+
+mu <- 0.10
+sigma <- 0.5
+
+log_X <- rnorm(n = 100000, mean = mu, sd = sigma)
+
+X <- exp(log_X)
+
+plot(density(X), xlim  = c(0, 10))
+     
+
+mu_X <- exp(mu + 0.5*sigma^2) ; mu_X ; mean(X)
+med_X <- exp(mu) ; med_X ; median(X)
+sd_X <- sqrt((exp(sigma^2) - 1) * exp(2*mu + sigma^2)) ; sd_X ; sd(X)
+
+quantile_X_lower <- exp(mu + sigma*qnorm(0.16)) ; quantile_X_lower
+quantile_X_upper <- exp(mu + sigma*qnorm(1 - 0.16)) ; quantile_X_upper
+
+exp(mu + sigma*qnorm(0.50))
+
+sd_from_q_X <- (log(quantile_X_upper) - log(quantile_X_lower))/2
+
+sd_from_q_X <- sqrt((quantile_X_upper-med_X)*(med_X-quantile_X_lower)) ; sd_from_q_X
+
+
+sd_X_from_quantile <- 
+
+plot(density(rnorm(n = 10000, mean = med_X, sd = sd_X)))
 
 true_Se_OVERALL[4:7]
 

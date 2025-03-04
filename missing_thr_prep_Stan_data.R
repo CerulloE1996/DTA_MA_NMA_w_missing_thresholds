@@ -1,7 +1,7 @@
 
 
 
-setwd("/home/enzocerullo/Documents/Work/PhD_work/DTA_MA_NMA_w_missing_thresholds")
+## setwd("/home/enzocerullo/Documents/Work/PhD_work/DTA_MA_NMA_w_missing_thresholds")
 
 source("R_fn_load_data_ordinal_MA_LC_MVP_sim.R")
 
@@ -245,6 +245,7 @@ x_cat <- list(x_nd_cat, x_d_cat)
         ##
         Stan_data_list$cts_thr_values_nd <- seq(from = 1, to = n_thr, by = 1)
         Stan_data_list$cts_thr_values_d  <- seq(from = 1, to = n_thr, by = 1)
+        Stan_data_list$cts_thr_values  <- seq(from = 1, to = n_thr, by = 1)
         ##
         Stan_data_list$use_box_cox <- 1
         ##
@@ -265,10 +266,10 @@ x_cat <- list(x_nd_cat, x_d_cat)
         Stan_data_list$prior_beta_SD_mean <- rep(0.0, 2)
         Stan_data_list$prior_beta_SD_SD   <- rep(0.50, 2)  ##* 1.702
         ##
-        Stan_data_list$prior_log_scale_mu_mean <- rep(0.0, 2)
-        Stan_data_list$prior_log_scale_mu_SD   <- rep(1.0, 2)  ##* 1.702
-        Stan_data_list$prior_log_scale_SD_mean <- rep(0.0, 2)
-        Stan_data_list$prior_log_scale_SD_SD   <- rep(0.50, 2) ##* 1.702
+        Stan_data_list$prior_raw_scale_mu_mean <- rep(0.0, 2)
+        Stan_data_list$prior_raw_scale_mu_SD   <- rep(1.0, 2)  ##* 1.702
+        Stan_data_list$prior_raw_scale_SD_mean <- rep(0.0, 2)
+        Stan_data_list$prior_raw_scale_SD_SD   <- rep(0.50, 2) ##* 1.702
         ##
         Stan_data_list$prior_only <- 0
         
