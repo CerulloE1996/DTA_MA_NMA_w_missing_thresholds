@@ -49,33 +49,54 @@ R_fn_compile_Stan_model <- function(Stan_model_file_path,
                     ##
                     CPU_BASE_FLAGS <- "-O3  -march=native  -mtune=native"
                     ## Check for CPU features (i.e., FMA and/or AVX and/or AVX2 and/or AVX-512)
-                    check_CPU_features_using_BayesMVP <- BayesMVP:::checkCPUFeatures()
-                    ## FMA:
                     if (is.null(FMA_FLAGS)) {
-                        has_FMA <- check_CPU_features_using_BayesMVP$has_fma
-                        if (has_FMA == 1) { 
-                          FMA_FLAGS <- "-mfma"
-                        }
+                      FMA_FLAGS <- " "
                     }
+                    try({  
+                        try({ 
+                             check_CPU_features_using_BayesMVP <- BayesMVP:::checkCPUFeatures()
+                          }, silent = TRUE)
+                          ## FMA:
+                          if (is.null(FMA_FLAGS)) {
+                             has_FMA <- 0
+                            try({ 
+                              has_FMA <- check_CPU_features_using_BayesMVP$has_fma
+                            })
+                              if (has_FMA == 1) { 
+                                FMA_FLAGS <- "-mfma"
+                              }
+                          }
+                    })
+                    
+                    detect_SIMD_type <- NULL
                     
                     if (is.null(AVX_FLAGS)) {
-                        ## AVX Flags (using AVX2 on my laptop and AVX-512 on my local HPC):
-                        AVX_512_FLAGS <- "-mavx -mavx2 -mavx512f -mavx512vl -mavx512dq" ## for AVX-512 - ONLY USE IF YOUR PC SUPPORTS AVX-512 (MANY DONT!) - ELSE COMMENT OUT!
-                        AVX2_FLAGS <- "-mavx -mavx2" ## for AVX2 - ONLY USE IF YOUR PC SUPPORTS AVX2 - ELSE COMMENT OUT!
-                        AVX1_FLAGS <- "-mavx"
-                        #
-                        detect_SIMD_type <- BayesMVP:::detect_vectorization_support()
-                        ##
-                        if (detect_SIMD_type == "AVX512") { 
-                          AVX_FLAGS <- AVX_512_FLAGS
-                        } else if  (detect_SIMD_type == "AVX2") { 
-                          AVX_FLAGS <- AVX2_FLAGS
-                        } else if  (detect_SIMD_type == "AVX") {  
-                          AVX_FLAGS <- AVX1_FLAGS 
-                        } else { 
-                          AVX_FLAGS <- " "  ## No AVX fns at all otherwise
-                        }
+                       AVX_FLAGS <- " "
                     }
+                    try({  
+                        if (is.null(AVX_FLAGS)) {
+                            ## AVX Flags (using AVX2 on my laptop and AVX-512 on my local HPC):
+                            AVX_512_FLAGS <- "-mavx -mavx2 -mavx512f -mavx512vl -mavx512dq" ## for AVX-512 - ONLY USE IF YOUR PC SUPPORTS AVX-512 (MANY DONT!) - ELSE COMMENT OUT!
+                            AVX2_FLAGS <- "-mavx -mavx2" ## for AVX2 - ONLY USE IF YOUR PC SUPPORTS AVX2 - ELSE COMMENT OUT!
+                            AVX1_FLAGS <- "-mavx"
+                            #
+                            detect_SIMD_type <- NULL
+                            AVX_FLAGS <- NULL
+                            try({ 
+                              detect_SIMD_type <- BayesMVP:::detect_vectorization_support()
+                            }, silent = TRUE)
+                            ##
+                            if (detect_SIMD_type == "AVX512") { 
+                              AVX_FLAGS <- AVX_512_FLAGS
+                            } else if  (detect_SIMD_type == "AVX2") { 
+                              AVX_FLAGS <- AVX2_FLAGS
+                            } else if  (detect_SIMD_type == "AVX") {  
+                              AVX_FLAGS <- AVX1_FLAGS 
+                            } else { 
+                              AVX_FLAGS <- " "  ## No AVX fns at all otherwise
+                            }
+                        }
+                    })
                     ##
                     CPU_FLAGS <- paste(CPU_BASE_FLAGS, FMA_FLAGS, AVX_FLAGS)
                     ## Math flags:

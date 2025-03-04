@@ -3,33 +3,35 @@
 
  
 
-
+## Set wd:
 setwd("/home/enzocerullo/Documents/Work/PhD_work/DTA_MA_NMA_w_missing_thresholds")
-
 setwd("/home/enzo/Documents/Work/PhD_work/DTA_MA_NMA_w_missing_thresholds")
+
+
+
 
 require(BayesMVP)
 require(TruncatedNormal)
 
-install.packages("TruncatedNormal")
-remotes::install_github("tylermorganwall/spacefillr")
-
-
-install.packages("spacefillr", 
-                 configure.args = "--with-include-dir=include",
-                 type = "source")
-
-Sys.setenv(CPPFLAGS = paste(Sys.getenv("CPPFLAGS"), "-I./include", sep = " "))
-Sys.setenv(CPPFLAGS = paste(Sys.getenv("CPPFLAGS"), "-I./inst/include", sep = " "))
-install.packages("spacefillr", type = "source")
-
-
-Sys.setenv(CXX="g++")
-Sys.setenv(CC="gcc")
-install.packages("MCMCpack")
-
-
-install.packages("/home/enzo/Downloads/spacefillr_download/spacefillr_fixed.tar.gz", repos = NULL, type = "source")
+# install.packages("TruncatedNormal")
+# remotes::install_github("tylermorganwall/spacefillr")
+# 
+# 
+# install.packages("spacefillr", 
+#                  configure.args = "--with-include-dir=include",
+#                  type = "source")
+# 
+# Sys.setenv(CPPFLAGS = paste(Sys.getenv("CPPFLAGS"), "-I./include", sep = " "))
+# Sys.setenv(CPPFLAGS = paste(Sys.getenv("CPPFLAGS"), "-I./inst/include", sep = " "))
+# install.packages("spacefillr", type = "source")
+# 
+# 
+# Sys.setenv(CXX="g++")
+# Sys.setenv(CC="gcc")
+# install.packages("MCMCpack")
+# 
+# 
+# install.packages("/home/enzo/Downloads/spacefillr_download/spacefillr_fixed.tar.gz", repos = NULL, type = "source")
 
 
 source("R_fn_load_data_ordinal_MA_LC_MVP_sim.R")
@@ -59,25 +61,55 @@ options(scipen = 999999999999)
     Stan_data_list$use_empirical_cutpoint_means <- 0
     ##
     
+     method <- "sigma"
     method <- "kappa"
     # method <- "alpha"
     
-    if (method == "kappa") {
+    
+    if (method == "sigma") { 
+      
+            prior_dirichlet_cat_SDs_mean <- rep(0.00, n_cat)
+            prior_dirichlet_cat_SDs_SD   <- rep(0.10, n_cat)
+            prior_dirichlet_cat_means_alpha <- rep(1.00, n_cat)
+            ##
+            Stan_data_list$prior_dirichlet_cat_SDs_mean <- prior_dirichlet_cat_SDs_mean
+            Stan_data_list$prior_dirichlet_cat_SDs_SD <- prior_dirichlet_cat_SDs_SD
+            Stan_data_list$prior_dirichlet_cat_means_alpha <- prior_dirichlet_cat_means_alpha
+            ##
+            Stan_data_list$log_alpha_lb <- log(kappa_lb)
+            Stan_data_list$log_alpha_ub <- +Inf
+            print(paste("alpha_lb = ")) ; print(exp( Stan_data_list$log_alpha_lb ))
+            print(paste("alpha_ub = ")) ; print(exp( Stan_data_list$log_alpha_ub ))
+            # ##
+            # inf_dir_samples <- induced_Dirichlet_ppc_plot(   method = method,
+            #                                                  use_log_alpha = FALSE,
+            #                                                  use_log_kappa = FALSE,
+            #                                                  log_alpha_lb = Stan_data_list$log_alpha_lb,
+            #                                                  log_alpha_ub = Stan_data_list$log_alpha_ub,
+            #                                                  prior_mean = Stan_data_list$prior_kappa_mean,
+            #                                                  prior_sd = Stan_data_list$prior_kappa_SD,
+            #                                                  prior_dirichlet_phi =   prior_dirichlet_cat_means_alpha,
+            #                                                  n_cat = n_cat,
+            #                                                  N = 5000)
+      
+      
+    } else if (method == "kappa") {
+  
       
             prior_kappa_mean <- 0
             prior_kappa_SD <-   200
-            prior_dirichlet_phi <- rep(1, n_cat)
+            prior_dirichlet_cat_means_alpha <- rep(1, n_cat)
             ##
             Stan_data_list$prior_kappa_mean <-  rep(prior_kappa_mean, 1)
             Stan_data_list$prior_kappa_SD <-    rep(prior_kappa_SD, 1)
-            Stan_data_list$prior_dirichlet_phi <- prior_dirichlet_phi
+            Stan_data_list$prior_dirichlet_cat_means_alpha <- prior_dirichlet_cat_means_alpha
             ##
             kappa_lb <- 1
             Stan_data_list$log_alpha_lb <- log(kappa_lb)
             Stan_data_list$log_alpha_ub <- +Inf
             print(paste("alpha_lb = ")) ; print(exp( Stan_data_list$log_alpha_lb ))
             print(paste("alpha_ub = ")) ; print(exp( Stan_data_list$log_alpha_ub ))
-
+            ##
             inf_dir_samples <- induced_Dirichlet_ppc_plot(   method = method,
                                                              use_log_alpha = FALSE,
                                                              use_log_kappa = FALSE,
@@ -85,7 +117,7 @@ options(scipen = 999999999999)
                                                              log_alpha_ub = Stan_data_list$log_alpha_ub,
                                                              prior_mean = Stan_data_list$prior_kappa_mean,
                                                              prior_sd = Stan_data_list$prior_kappa_SD,
-                                                             prior_dirichlet_phi =   prior_dirichlet_phi,
+                                                             prior_dirichlet_phi =   prior_dirichlet_cat_means_alpha,
                                                              n_cat = n_cat,
                                                              N = 5000)
     
@@ -95,10 +127,10 @@ options(scipen = 999999999999)
             # prior_alpha_mean <-  0
             # prior_alpha_SD   <-  10
             # ##
-            # prior_dirichlet_phi <- rep(1, n_cat) #'# dummy
+            # prior_dirichlet_cat_means_alpha <- rep(1, n_cat) #'# dummy
             # Stan_data_list$prior_kappa_mean <-  rep(prior_alpha_mean, 2)
             # Stan_data_list$prior_kappa_SD <-    rep(prior_alpha_SD, 2)
-            # Stan_data_list$prior_dirichlet_phi <- list(prior_dirichlet_phi, prior_dirichlet_phi)
+            # Stan_data_list$prior_dirichlet_cat_means_alpha <- list(prior_dirichlet_cat_means_alpha, prior_dirichlet_cat_means_alpha)
             # ##
             # Stan_data_list$log_alpha_lb <- log(0.1)
             # Stan_data_list$log_alpha_ub <- +Inf
@@ -195,15 +227,17 @@ options(scipen = 999999999999)
 
 
 
-## ---------  Note: models w/ "HOMOG" in name have the SAME set of cutpoints between the D+ and D- class. 
-## Model_type <- "Jones_HOMOG_cutpoints" ## --------- WORKING
-Model_type <- "Jones" ## --------- WORKING
-## --------- Models w/ free + independent scale parameterss in D+ and D- groups:
-# Model_type <- "Cerullo_FIXED_HOMOG_cutpoints"
-Model_type <- "Cerullo_FIXED_cutpoints"
-## --------- Models w/ free + independent scale parameterss in D+ and D- groups:
-# Model_type <- "Cerullo_RANDOM_HOMOG_cutpoints" ## NOT currently working!!!
-Model_type <- "Cerullo_RANDOM_cutpoints"
+#### --------- Select model type:
+# Model_type <- "Jones"
+##
+#### --------- Models w/ free + independent scale parameterss in D+ and D- groups:
+# Model_type <- "Cerullo_Xu_FIXED_cutpoints"!
+Model_type <- "Cerullo_Xu_RANDOM_cutpoints"
+##
+# Model_type <- "Cerullo_Gat_FIXED_cutpoints"!
+Model_type <- "Cerullo_Gat_RANDOM_cutpoints"
+
+
 
 
 
@@ -214,12 +248,23 @@ Model_type <- "Cerullo_RANDOM_cutpoints"
 
 
 ##
-# cutpoint_param <- "alpha"
- cutpoint_param <- "kappa"
+#  cutpoint_param <- "alpha"
+#  cutpoint_param <- "kappa"
+cutpoint_param <- "sigma"
 ##
-# cutpoint_param <- "log_normal"
+##  cutpoint_param <- "log_normal"
 ##  cutpoint_param <- "softplus"
 
+
+
+- apple cider vinegar
+- baking soda
+- microwave 
+- mixed veg (frozen)
+- lambs lettuce (for Bruce)
+- tin of black beans
+- 1-2 natural yogurts
+- ONE tin of tomatos
 
 
 
@@ -238,24 +283,24 @@ Model_type <- "Cerullo_RANDOM_cutpoints"
                          Stan_data_list$prior_beta_SD_SD   <- rep(5.0, 2)
                          file <- file.path(getwd(), "stan_models", "DTA_MA_JONES_BOXCOX.stan")
                  
-           } else if (Model_type == "Jones_HOMOG_cutpoints") {
-             
-                         Stan_data_list$prior_boxcox_lambda_mean <- 0.0
-                         Stan_data_list$prior_boxcox_lambda_SD   <- 1.0
-                         file <- file.path(getwd(), "stan_models", "DTA_MA_JONES_HOMOG_BOXCOX.stan")
+           # } else if (Model_type == "Jones_HOMOG_cutpoints") {
+           #   
+           #               Stan_data_list$prior_boxcox_lambda_mean <- 0.0
+           #               Stan_data_list$prior_boxcox_lambda_SD   <- 1.0
+           #               file <- file.path(getwd(), "stan_models", "DTA_MA_JONES_HOMOG_BOXCOX.stan")
                          
-           } else if (Model_type == "Cerullo_FIXED_cutpoints") {
+           } else if (Model_type == "Cerullo_Xu_FIXED_cutpoints") {
              
                          Stan_init_list$C_nd <-  c(array(dim = c(n_thr, 1), data = seq(from = -2.0, to = 2.0, length = n_thr)))
                          Stan_init_list$C_d  <-  c(array(dim = c(n_thr, 1), data = seq(from = -2.0, to = 2.0, length = n_thr)))
                          file <- file.path(getwd(), "stan_models", "DTA_MA_Xu_FIXEDthr.stan")
                  
-           } else if (Model_type == "Cerullo_FIXED_HOMOG_cutpoints") {
+           # } else if (Model_type == "Cerullo_FIXED_HOMOG_cutpoints") {
+           #   
+           #               Stan_init_list$cutpoints <-  c(array(dim = c(n_thr, 1), data = seq(from = -2.0, to = 2.0, length = n_thr)))
+           #               file <- file.path(getwd(), "stan_models", "DTA_MA_FIXEDthr_HOMOG_NONsymROC.stan")
              
-                         Stan_init_list$cutpoints <-  c(array(dim = c(n_thr, 1), data = seq(from = -2.0, to = 2.0, length = n_thr)))
-                         file <- file.path(getwd(), "stan_models", "DTA_MA_FIXEDthr_HOMOG_NONsymROC.stan")
-             
-           } else if (Model_type == "Cerullo_RANDOM_cutpoints") {
+           } else if (Model_type == "Cerullo_Xu_RANDOM_cutpoints") {
              
                          Stan_init_list$C_nd <-   t(array(dim = c(n_thr, n_studies), data = seq(from = -2.0, to = 2.0, length = n_thr)))
                          Stan_init_list$C_d  <-   t(array(dim = c(n_thr, n_studies), data = seq(from = -2.0, to = 2.0, length = n_thr)))
@@ -276,7 +321,8 @@ Model_type <- "Cerullo_RANDOM_cutpoints"
                          Stan_init_list$exp_inc_m1_SD <- rep(0.01, n_thr - 1)
                          Stan_init_list$raw <-      array(0.01, dim = c(n_studies, n_thr - 1))
                          ##
-                         Stan_init_list$phi <- c(rep(1/(n_thr + 1), n_thr + 1))
+                         Stan_init_list$dirichlet_cat_means_phi <- c(rep(1/(n_thr + 1), n_thr + 1))
+                         
                          
                          if (cutpoint_param == "alpha") { 
                            
@@ -295,16 +341,16 @@ Model_type <- "Cerullo_RANDOM_cutpoints"
                               file <- file.path(getwd(), "stan_models", "DTA_MA_Xu_RANDthr_SOFTP.stan")
                               ## file <- file.path(getwd(), "stan_models", "DTA_MA_Xu_RANDthr_SOFTP2.stan")
                              
+                         } else if (cutpoint_param == "sigma") { 
+                           
+                              file <- file.path(getwd(), "stan_models", "DTA_MA_Xu_RANDthr_SD.stan")
+                           
                          }
                        
-                            
-           } else if (Model_type == "Cerullo_RANDOM_HOMOG_cutpoints") {
+           } else if (Model_type == "Cerullo_Gat_FIXED_cutpoints") {
              
-                         Stan_init_list$cutpoints <-  t(array(dim = c(n_thr, n_studies), data = seq(from = -2.0, to = 2.0, length = n_thr)))
-                         Stan_init_list$log_alpha <- rep(0.01, n_cat)
-                         Stan_init_list$alpha <- rep(1.01, n_cat)
-                         file <- file.path(getwd(), "stan_models", "DTA_MA_Xu_RANDthr_HOMOG.stan")
-                 
+           } else if (Model_type == "Cerullo_Gat_RANDOM_cutpoints") {
+             
            }
         
   
@@ -606,9 +652,9 @@ Model_type <- "Cerullo_RANDOM_cutpoints"
           Stan_mod_sample$summary(c("raw_SD"))  %>% print(n = 100)
           Stan_mod_sample$summary(c("log_increment_SD"))  %>% print(n = 100)
           ##
+          Stan_mod_sample$summary(c("category_means"))  %>% print(n = 100)
           Stan_mod_sample$summary(c("category_SDs"))  %>% print(n = 100)
-          Stan_mod_sample$summary(c("category_SDs"))  %>% print(n = 100)
-          Stan_mod_sample$summary(c("category_SDs"))  %>% print(n = 100)
+          Stan_mod_sample$summary(c("kappa"))  %>% print(n = 100)
         # })
         # try({ 
         #   Stan_mod_sample$summary(c("C_mu_empirical"))  %>% print(n = 100)
@@ -645,8 +691,8 @@ Model_type <- "Cerullo_RANDOM_cutpoints"
         
 }
 
-mu <- 0.10
-sigma <- 0.5
+mu <- 0.50
+sigma <- 1.10
 
 log_X <- rnorm(n = 100000, mean = mu, sd = sigma)
 
@@ -1048,3 +1094,22 @@ approx_MU <- log(exp(soft_C_normal_MED) - 1) + correction; approx_MU
 # 
 # 
 # 
+
+
+
+
+
+samps <- TruncatedNormal::rtnorm(n = 10000, mu = 0.5, sd = 1.0)
+soft_samps <- log(1 + exp(samps))
+
+round(quantile(soft_samps, probs = c(0.025, 0.50, 0.975)), 2)
+  
+
+
+
+
+
+
+
+
+

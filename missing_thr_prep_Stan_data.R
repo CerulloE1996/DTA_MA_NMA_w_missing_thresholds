@@ -266,7 +266,7 @@ x_cat <- list(x_nd_cat, x_d_cat)
         Stan_data_list$prior_beta_SD_mean <- rep(0.0, 2)
         Stan_data_list$prior_beta_SD_SD   <- rep(0.50, 2)  ##* 1.702
         ##
-        Stan_data_list$prior_raw_scale_mu_mean <- rep(0.0, 2)
+        Stan_data_list$prior_raw_scale_mu_mean <- rep(0.50, 2) ## since using: scale = log(1 + exp(raw_scale)) NOT scale = exp(raw_scale). 
         Stan_data_list$prior_raw_scale_mu_SD   <- rep(1.0, 2)  ##* 1.702
         Stan_data_list$prior_raw_scale_SD_mean <- rep(0.0, 2)
         Stan_data_list$prior_raw_scale_SD_SD   <- rep(0.50, 2) ##* 1.702
