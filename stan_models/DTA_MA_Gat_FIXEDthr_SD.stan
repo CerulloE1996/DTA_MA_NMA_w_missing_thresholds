@@ -108,11 +108,11 @@ functions {
                     return sorted_x[middle_element];
                 }
        }
-        
+
 }
 
 
-        
+
 
 data {
     
@@ -123,86 +123,87 @@ data {
         array[2] matrix[n_studies, n_thr] n;
         array[2] matrix[n_studies, n_thr] x;
         array[2] matrix[n_studies, n_thr] cutpoint_index;
-        //// ////
-        //// array[2] matrix[n_studies, n_thr + 1] x_cat;
-        //// Priors:
-        vector[2] prior_beta_mu_mean;
-        vector[2] prior_beta_mu_SD;
-        vector[2] prior_beta_SD_mean;
-        vector[2] prior_beta_SD_SD;
-        vector[2] prior_raw_scale_mu_mean;
-        vector[2] prior_raw_scale_mu_SD;
-        vector[2] prior_raw_scale_SD_mean;
-        vector[2] prior_raw_scale_SD_SD;
+        //// Priors for beta:
+        real prior_beta_mu_mean;
+        real prior_beta_mu_SD;
+        real prior_beta_SD_mean;
+        real prior_beta_SD_SD;
+        //// Priors for raw_scale:
+        real prior_raw_scale_mu_mean;
+        real prior_raw_scale_mu_SD;
+        real prior_raw_scale_SD_mean;
+        real prior_raw_scale_SD_SD;
         //// Induced-Dirichlet priors:
         vector<lower=0.0>[n_thr + 1] prior_alpha; // Induced-Dirichlet prior vector 
         //// Other:
         int prior_only;
-        int estimate_scales;
-    
   
 }
 
 transformed data { 
     
         int n_cat = n_thr + 1; //// Number of ordinal categories for index test
+        
 }
   
 
 
 parameters {
   
-        vector[2] beta_mu;    
-        vector<lower=0.0>[2] beta_SD;   
-        matrix[2, n_studies] beta_z;    // Study-specific random effects for beta (off-centered parameterisation)
-        cholesky_factor_corr[2] beta_L_Omega;
+        real beta_mu;    
+        real<lower=0.0> beta_SD;   
+        vector[n_studies] beta_z;
         ////
-        real raw_scale_d_mu;    
-        real<lower=0.0> raw_scale_d_SD;   
-        vector[n_studies] raw_scale_d_z;
+        real raw_scale_mu;    
+        real<lower=0.0> raw_scale_SD;   
+        vector[n_studies] raw_scale_z;
+        ////
+        cholesky_factor_corr[2] bs_L_Omega;
         ////
         ordered[n_thr] C;  // Global cutpoints
-      
+        
 }
 
 
 transformed parameters { 
-    
-        matrix[2, n_studies] beta;
-        cholesky_factor_cov[2] beta_L_Sigma;
+  
+        matrix[2, n_studies] locations;
         ////
-        vector[2] raw_scale_mu;    
-        vector<lower=0.0>[2] raw_scale_SD;   
-        matrix[2, n_studies] raw_scale_z;
-        matrix[2, n_studies] raw_scale;
-        matrix[2, n_studies] scale;
+        matrix[2, n_studies] scales;
+        ////
+        cholesky_factor_cov[2] bs_L_Sigma;
+        ////
+        vector[2] bs_mu_vec;
+        bs_mu_vec[1] = beta_mu;
+        bs_mu_vec[2] = raw_scale_mu;
+        ////
+        vector[2] bs_SD_vec;
+        bs_SD_vec[1] = beta_SD;
+        bs_SD_vec[2] = raw_scale_SD;
+        ////
+        matrix[2, n_studies] bs_z_mat;
+        bs_z_mat[1, ] = to_row_vector(beta_z);
+        bs_z_mat[2, ] = to_row_vector(raw_scale_z);
+        ////
+        bs_L_Sigma = diag_pre_multiply(bs_SD_vec, bs_L_Omega);
         ////
         array[2] matrix[n_studies, n_thr] logit_cumul_prob; // Ordinal probs for the likelihood
-        array[2] matrix[n_studies, n_thr] cumul_prob; // Ordinal probs for the likelihood
-        array[2] matrix[n_studies, n_thr] cond_prob;  // Ordinal probs for the likelihood
-        array[2] matrix[n_studies, n_thr] log_lik;  // log_lik storage
+        array[2] matrix[n_studies, n_thr] cumul_prob;  // Ordinal probs for the likelihood
+        array[2] matrix[n_studies, n_thr] cond_prob;   // Ordinal probs for the likelihood
+        array[2] matrix[n_studies, n_thr] log_lik;     // log_lik storage
         ////
         vector[n_thr] Ind_Dir_anchor;
         vector[n_thr] Ind_Dir_cumul;
         vector[n_thr] Ind_Dir_cumul_prob;
         vector[n_cat] Ind_Dir_ord_prob;
         ////
-        real Jacobian_raw_scale_to_scale = 0.0;
-        ////
         //// Initialise matrices:
         ////
         for (c in 1:2) {
-                   logit_cumul_prob[c] = rep_matrix(positive_infinity(), n_studies, n_thr);
-                   cumul_prob[c]       = rep_matrix(1.0, n_studies, n_thr);
-                   cond_prob[c]        = rep_matrix(0.0, n_studies, n_thr);
-                   log_lik[c]          = rep_matrix(0.0, n_studies, n_thr);
-        }
-        ////
-        //// Between-study model for the location parameters ("beta") - models between-study correlation:
-        ////
-        beta_L_Sigma = diag_pre_multiply(beta_SD, beta_L_Omega);
-        for (s in 1:n_studies) {
-             beta[, s] = beta_mu + beta_L_Sigma * beta_z[, s];
+                 logit_cumul_prob[c]   = rep_matrix(positive_infinity(), n_studies, n_thr);
+                 cumul_prob[c]         = rep_matrix(1.0, n_studies, n_thr);
+                 cond_prob[c]          = rep_matrix(1.0, n_studies, n_thr);
+                 log_lik[c]            = rep_matrix(0.0, n_studies, n_thr);
         }
         ////
         //// Induced-Dirichlet ** prior model ** stuff:
@@ -219,42 +220,42 @@ transformed parameters {
                    }
                    Ind_Dir_ord_prob[n_cat] =  1.0 - Ind_Dir_cumul_prob[n_cat - 1];
         }
-        //// Between-study model for raw_sscale parameters:
         ////
-        raw_scale_mu[1] = 0.0;
-        raw_scale_SD[1] = 0.0;
-        raw_scale_z[1, ]  = rep_row_vector(0.0, n_studies);
+        //// Between-study model for the location parameters ("beta") - models between-study correlation:
         ////
-        if (estimate_scales == 1) { 
-              raw_scale_mu[2]   = raw_scale_d_mu;
-              raw_scale_SD[2]   = raw_scale_d_SD;
-              raw_scale_z[2, ]  = to_row_vector(raw_scale_d_z);
-        } else { 
-              raw_scale_mu[2] = 0.0;
-              raw_scale_SD[2] = 0.0;
-              raw_scale_z[2, ]  = rep_row_vector(0.0, n_studies);
+        {
+            matrix[2, n_studies] bs_mat;
+            for (s in 1:n_studies) {
+                 bs_mat[, s] = bs_mu_vec + bs_L_Sigma * bs_z_mat[, s];
+            }
+            ////
+            for (s in 1:n_studies) {
+                locations[1, s] = -0.5*bs_mat[1, s];
+                locations[2, s] = +0.5*bs_mat[1, s];
+                scales[1, s] = log1p_exp(-0.5*bs_mat[2, s]);
+                scales[2, s] = log1p_exp(+0.5*bs_mat[2, s]);
+            }
         }
-        for (c in 1:2) {
-            raw_scale[c, ] = to_row_vector(raw_scale_mu[c] + raw_scale_z[c, ] * raw_scale_SD[c]);
-            scale[c, ] = log1p_exp(raw_scale[c, ]);
-        }
-        if (estimate_scales == 1) { 
-            Jacobian_raw_scale_to_scale += sum(log_inv_logit(raw_scale[2, ])); // Only in diseased class!
-        }
+        ////
         //// Likelihood using binomial factorization:
+        ////
         for (s in 1:n_studies) {
-                for (c in 1:2) {
+                  for (c in 1:2) {
                       for (cut_i in 1:to_int(n_cutpoints[c, s])) {
-                              int k = to_int(cutpoint_index[c][s, cut_i]);
-                              logit_cumul_prob[c][s, cut_i] = (C[k] - beta[c, s])/scale[c, s];
-                      } 
-                }
+                             int k = to_int(cutpoint_index[c][s, cut_i]);
+                             logit_cumul_prob[c][s, cut_i] = (C[k] - locations[c, s])/scales[c, s];
+                      }
+                  }
         }
+        ////
         //// Calculate CUMULATIVE probabilities (vectorised):
+        ////
         for (c in 1:2) {
-            cumul_prob[c] = Phi(logit_cumul_prob[c]);
+            cumul_prob[c] = Phi(logit_cumul_prob[c]); //// INCREASING sequence (as C_k > C_{k - 1})
         }
+        ////
         //// ------- Binomial likelihood:
+        ////
         for (s in 1:n_studies) {
                 for (c in 1:2) {
                       for (cut_i in 1:n_cutpoints[c, s]) {
@@ -290,12 +291,16 @@ transformed parameters {
 model {
       
         //// Priors:
-        beta_mu ~ normal(prior_beta_mu_mean, prior_beta_mu_SD);
-        beta_SD ~ normal(prior_beta_SD_mean, prior_beta_SD_SD);
-        beta_L_Omega ~ lkj_corr_cholesky(2.0);
-        ////
-        raw_scale_d_mu ~ normal(prior_raw_scale_mu_mean[2], prior_raw_scale_mu_SD[2]);
-        raw_scale_d_SD ~ normal(prior_raw_scale_SD_mean[2], prior_raw_scale_SD_SD[2]);
+        {
+            //// locations:
+            beta_mu ~ normal(prior_beta_mu_mean, prior_beta_mu_SD);
+            beta_SD ~ normal(prior_beta_SD_mean, prior_beta_SD_SD);
+            //// scales:
+            raw_scale_mu ~ normal(prior_raw_scale_mu_mean, prior_raw_scale_mu_SD);
+            raw_scale_SD ~ normal(prior_raw_scale_SD_mean, prior_raw_scale_SD_SD);
+            //// Between-study correlation:
+            bs_L_Omega ~ lkj_corr_cholesky(2.0);
+        }
         ////
         //// Induced-dirichlet ** Prior ** model:
         ////
@@ -304,19 +309,12 @@ model {
                target += induced_dirichlet_v2_lpdf( Ind_Dir_ord_prob[1:n_cat] | rho, prior_alpha);
         }
         ////
-        //// Jacobian adjustments needed for scales (if estimating them):
-        ////
-        if (estimate_scales == 1) { 
-            target +=  Jacobian_raw_scale_to_scale;
-            //// Also need the Jacobian to go from (raw_scale_z, raw_scale_mu, raw_scale_SD) -> raw_scale! (using chain rule):
-            if (abs(raw_scale_d_SD) != 0.0)     target += log(abs(raw_scale_d_SD));      // double-checked the log-derivative of this by hand (correct)
-            if (abs(sum(raw_scale_d_z)) != 0.0) target += log(abs(sum(raw_scale_d_z)));  // double-checked the log-derivative of this by hand (correct)
-        }
-        ////
         //// Likelihood / Model:
         ////
-        to_vector(raw_scale_d_z) ~ std_normal(); // part of between-study model, NOT prior
-        to_vector(beta_z) ~ std_normal();        // part of between-study model, NOT prior
+        {
+            to_vector(beta_z) ~ std_normal();       // (part of between-study model, NOT prior)
+            to_vector(raw_scale_z) ~ std_normal();  // (part of between-study model, NOT prior)
+        }
         //// Increment the log-likelihood:
         if (prior_only == 0) {
             for (c in 1:2) {
@@ -325,6 +323,10 @@ model {
         }
   
 }
+
+
+
+
  
 
 generated quantities {
@@ -345,67 +347,65 @@ generated quantities {
           matrix[n_studies, n_thr] dev_d    = rep_matrix(-1, n_studies, n_thr);
           array[2] matrix[n_studies, n_thr] x_hat;
           array[2] matrix[n_studies, n_thr] dev;
-          corr_matrix[2] beta_Omega;
-          vector[2] scale_mu = log1p_exp(raw_scale_mu);
-          
-          //// Compute between-study correlation matrix:
-          beta_Omega = multiply_lower_tri_self_transpose(beta_L_Omega);
-
+          corr_matrix[2] bs_Omega;
+          int n_sims = 1000;
+             
+          //// Compute between-study correlation matrix for location parameters:
+          bs_Omega  =  multiply_lower_tri_self_transpose(bs_L_Omega);
+  
           //// Initialise containers:
           for (c in 1:2) {
               x_hat[c]  = rep_matrix(-1, n_studies, n_thr);
-              dev[c]    = rep_matrix(-1, n_studies, n_thr);
+              dev[c]    = rep_matrix(-1, n_studies, n_thr); 
           }
+          ////
           //// Calculate study-specific accuracy:
+          ////
           for (s in 1:n_studies) {
-                for (k in 1:n_thr) {
+                for (k in 1:n_thr) { 
                     fp[s, k] =   1.0 - cumul_prob[1][s, k];
                     sp[s, k] =   1.0 - fp[s, k];
                     se[s, k] =   1.0 - cumul_prob[2][s, k];
                 }
           }
+          ////
           //// Calculate summary accuracy (using mean parameters):
+          ////
           for (k in 1:n_thr) {
-                Fp[k] =   1.0 - Phi((beta_mu[1] - C[k])/scale_mu[1]);
+                Fp[k] =   1.0 - Phi((C[k] - 0.5*beta_mu)/log1p_exp(-0.5*raw_scale_mu));
                 Sp[k] =   1.0 - Fp[k];
-                Se[k] =   1.0 - Phi((beta_mu[2] - C[k])/scale_mu[2]);
+                Se[k] =   1.0 - Phi((C[k] + 0.5*beta_mu)/log1p_exp(+0.5*raw_scale_mu));
           }
+          ////
           //// Calculate predictive accuracy:
+          ////
           {
-                vector[2] beta_pred =  to_vector(multi_normal_cholesky_rng(beta_mu, beta_L_Sigma));
-                vector[2] raw_cale_pred;
-                raw_cale_pred[1]  = 0.0;
-                if (estimate_scales == 1) { 
-                   raw_cale_pred[2]  = normal_rng(raw_scale_mu[2], raw_scale_SD[2]);
-                } else { 
-                   raw_cale_pred[2]  = 0.0;
-                }
-    
-                vector[2] scale_pred = log1p_exp(raw_cale_pred);
-       
+                vector[2] bs_pred =  to_vector(multi_normal_cholesky_rng(bs_mu_vec, bs_L_Sigma));
                 for (k in 1:n_thr) {
-                      Fp_pred[k] =   1.0 - Phi((beta_pred[1] - C[k])/scale_pred[1]);
+                      Fp_pred[k] =   1.0 - Phi(C[k] - bs_pred[1]);
                       Sp_pred[k] =   1.0 - Fp_pred[k];
-                      Se_pred[k] =   1.0 - Phi((beta_pred[2] - C[k])/scale_pred[2]);
+                      Se_pred[k] =   1.0 - Phi(C[k] - bs_pred[2]);
                 }
           }
+          ////
           //// Model-predicted ("re-constructed") data:
+          ////
           for (s in 1:n_studies) {
               for (c in 1:2) {
                  for (cut_i in 1:to_int(n_cutpoints[c, s])) {
                   
-                      //// Model-estimated data:
-                      x_hat[c][s, cut_i] = cond_prob[c][s, cut_i] * n[c][s, cut_i];  	 // Fitted values
-                    
-                      //// Compute residual deviance contribution:
-                      real n_i =  (n[c][s, cut_i]);
-                      real x_i =  (x[c][s, cut_i]);
-                      real x_hat_i =  (x_hat[c][s, cut_i]);
-                      real log_x_minus_log_x_hat = log(x_i) - log(x_hat_i);
-                      real log_diff_n_minus_x = log(n_i - x_i);
-                      real log_diff_n_minus_x_hat = log(abs(n_i - x_hat_i));
-                       
-                      dev[c][s, cut_i] = 2.0 * ( x_i * log_x_minus_log_x_hat + (n_i - x_i) * (log_diff_n_minus_x - log_diff_n_minus_x_hat) ); 
+                        //// Model-estimated data:
+                        x_hat[c][s, cut_i] = cond_prob[c][s, cut_i] * n[c][s, cut_i];  	 // Fitted values
+                      
+                        //// Compute residual deviance contribution:
+                        real n_i =  (n[c][s, cut_i]);
+                        real x_i =  (x[c][s, cut_i]);
+                        real x_hat_i =  (x_hat[c][s, cut_i]);
+                        real log_x_minus_log_x_hat = log(x_i) - log(x_hat_i);
+                        real log_diff_n_minus_x = log(n_i - x_i);
+                        real log_diff_n_minus_x_hat = log(abs(n_i - x_hat_i));
+                         
+                        dev[c][s, cut_i] = 2.0 * ( x_i * log_x_minus_log_x_hat + (n_i - x_i) * (log_diff_n_minus_x - log_diff_n_minus_x_hat) ); 
                       
                  }
               }
@@ -417,14 +417,6 @@ generated quantities {
          dev_d = dev[2];
        
 }
-
-
-
-
-
-
-
-
 
 
 
