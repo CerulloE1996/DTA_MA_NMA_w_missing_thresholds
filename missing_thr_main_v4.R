@@ -349,6 +349,11 @@ cutpoint_param <- "sigma"
                            
              } else if (Model_type == "Cerullo_Gat_RANDOM_cutpoints") {
                
+                             Stan_data_list$prior_raw_scale_mu_mean <- 0.50
+                             Stan_data_list$prior_raw_scale_mu_SD   <- 1.00
+                             Stan_data_list$prior_raw_scale_SD_mean <- 0.0
+                             Stan_data_list$prior_raw_scale_SD_SD   <- 0.50
+                             ##
                              Stan_data_list$kappa_lb <- 0
                              ##
                              Stan_data_list$prior_beta_mu_mean <- 0.0
@@ -367,8 +372,14 @@ cutpoint_param <- "sigma"
                              Stan_init_list$beta_SD <- 0.001
                              Stan_init_list$beta_z <- rep(0.001, n_studies)
                              ##
+                             Stan_init_list$raw_scale_mu <- 0.55
+                             Stan_init_list$raw_scale_SD <- 0.001
+                             Stan_init_list$raw_scale_z <-  rep(0.001, n_studies)
+                             ##
                              Stan_data_list$prior_dirichlet_cat_SDs_mean <- rep(0.0 , n_cat)
                              Stan_data_list$prior_dirichlet_cat_SDs_SD   <- rep(0.10, n_cat)
+                             ##
+                             Stan_init_list$dirichlet_cat_means_phi <- rep(1/n_cat, n_cat)
                              ##
                              file <- file.path(getwd(), "stan_models", "DTA_MA_Gat_RANDthr_SD.stan")
                            
