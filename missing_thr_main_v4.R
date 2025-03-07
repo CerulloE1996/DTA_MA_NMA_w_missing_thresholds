@@ -345,7 +345,7 @@ cutpoint_param <- "sigma"
                              Stan_data_list$prior_raw_scale_SD_mean <- 0.0
                              Stan_data_list$prior_raw_scale_SD_SD   <- 0.50
                              ##
-                             file <- file.path(getwd(), "stan_models", "DTA_MA_Gat_FIXEDthr_SD.stan")
+                             file <- file.path(getwd(), "stan_models", "DTA_MA_Gat_FIXEDthr.stan")
                            
              } else if (Model_type == "Cerullo_Gat_RANDOM_cutpoints") {
                
@@ -863,6 +863,48 @@ ggplot(data = df_all,
   geom_polygon(data = Cerullo_polygon_Pred, aes(x = x, y = y), fill = "red",  alpha = 0.25) + 
   geom_polygon(data = Jones_polygon_Pred,   aes(x = x, y = y), fill = "cyan", alpha = 0.25)
   
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 Cerullo_polygon$Fp_lower
 Cerullo_polygon$Fp_upper
