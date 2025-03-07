@@ -533,14 +533,16 @@ generated quantities {
           ////
           {
                 vector[2] bs_pred =  to_vector(multi_normal_cholesky_rng(bs_mu_vec, bs_L_Sigma));
+                ////
                 real location_MU_nd_pred = -0.5*bs_pred[1];
-                real location_MU_d_pred  = +0.5*bs_pred[1];
                 real scale_MU_nd_pred = log1p_exp(-0.5*bs_pred[2]);
+                ////
+                real location_MU_d_pred  = +0.5*bs_pred[1];
                 real scale_MU_d_pred  = log1p_exp(+0.5*bs_pred[2]);
                 for (k in 1:n_thr) {
-                      Fp_pred[k] =   1.0 - Phi((C_MU[k] - location_MU_nd_pred)/scale_MU_nd_pred);
+                      Fp_pred[k] =   1.0 - Phi((C_mu_pred[k] - location_MU_nd_pred)/scale_MU_nd_pred);
                       Sp_pred[k] =   1.0 - Fp_pred[k];
-                      Se_pred[k] =   1.0 - Phi((C_MU[k] - location_MU_d_pred)/scale_MU_d_pred);
+                      Se_pred[k] =   1.0 - Phi((C_mu_pred[k] - location_MU_d_pred)/scale_MU_d_pred);
                 }
           }
           ////

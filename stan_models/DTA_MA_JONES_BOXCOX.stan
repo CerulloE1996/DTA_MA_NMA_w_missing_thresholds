@@ -176,7 +176,7 @@ transformed parameters {
         ////
         //// ------- Binomial likelihood:
         ////
-        for (s in 1:n_studies) {
+        for (s in 1:n_studies) { 
                 for (c in 1:2) {
                       for (cut_i in 1:n_cutpoints[c, s]) {
                               // Current and next cumulative counts
@@ -281,19 +281,32 @@ generated quantities {
           //// Calculate study-specific accuracy:
           for (s in 1:n_studies) {
              for (k in 1:n_thr) {
-                    fp[s, k] =   cumul_prob[1][s, k];
+                    fp[s, k] =   1.0 - cumul_prob[1][s, k];
                     sp[s, k] =   1.0 - fp[s, k];
-                    se[s, k] =   cumul_prob[2][s, k];
+                    se[s, k] =   1.0 - cumul_prob[2][s, k];
                 }
           }
           
           //// Calculate summary accuracy (using mean parameters):
           for (k in 1:n_thr) {
-                Fp[k] =   Phi((beta_mu[1] - C[k])/scale_mu[1]);
+                Fp[k] =   1.0 - Phi((C[k] - beta_mu[1])/scale_mu[1]);
                 Sp[k] =   1.0 - Fp[k];
-                Se[k] =   Phi((beta_mu[2] - C[k])/scale_mu[2]);
+                Se[k] =   1.0 - Phi((C[k] - beta_mu[2])/scale_mu[2]);
           }
-          
+          ////
+          //// Calculate predictive accuracy:
+          ////
+          {
+                vector[2] beta_pred      =  to_vector(multi_normal_cholesky_rng(beta_mu, diag_pre_multiply(beta_SD, beta_L_Omega)));
+                vector[2] raw_scale_pred =  to_vector(multi_normal_cholesky_rng(raw_scale_mu, diag_pre_multiply(raw_scale_SD, raw_scale_L_Omega)));
+                vector[2] scale_pred = log1p_exp(raw_scale_pred);
+                ////
+                for (k in 1:n_thr) {
+                      Fp_pred[k] =   1.0 - Phi((C[k] - beta_pred[1])/scale_pred[1]);
+                      Sp_pred[k] =   1.0 - Fp_pred[k];
+                      Se_pred[k] =   1.0 - Phi((C[k] - beta_pred[2])/scale_pred[2]);
+                }
+          }
           //// Model-predicted ("re-constructed") data:
          for (s in 1:n_studies) {
              for (c in 1:2) {
