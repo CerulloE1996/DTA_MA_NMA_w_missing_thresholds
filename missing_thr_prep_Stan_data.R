@@ -39,6 +39,10 @@ index_test_chosen_index <- 3
 n_thr <- 10
 
 
+sim_results$Se_OVERALL_all_tests_all_thresholds[index_test_chosen_index, 1:n_thr]
+
+ 
+
 # true_Se_OVERALL <- sim_results$Se_OVERALL_all_tests_all_thresholds[index_test_chosen_index, 1:n_thr] ; true_Se_OVERALL
 # true_Sp_OVERALL <- sim_results$Sp_OVERALL_all_tests_all_thresholds[index_test_chosen_index, 1:n_thr] ; true_Sp_OVERALL
 
@@ -74,10 +78,17 @@ agg_data_cumulative
 
 
 agg_data_cumulative$Se_per_study
-true_Se_OVERALL <- 100 * colMeans(agg_data_cumulative$Se_per_study) ; true_Se_OVERALL
-##
 agg_data_cumulative$Sp_per_study
+# this is the means of the OBSERVED (i.e. specific to the seed set for the given simulation) study-specific Se's at each threshold:
+true_Se_OVERALL <- 100 * colMeans(agg_data_cumulative$Se_per_study) ; true_Se_OVERALL 
 true_Sp_OVERALL <- 100 * colMeans(agg_data_cumulative$Sp_per_study) ; true_Sp_OVERALL
+# this is equal to: Se @ threshold k  = {number of TOTAL true-positives across all studies} / {TOTAL N across all studies}:
+true_Se_OVERALL_weighted <- sim_results$Se_OVERALL_all_tests_all_thresholds[index_test_chosen_index, 1:n_thr]*100 ; true_Se_OVERALL_weighted 
+true_Sp_OVERALL_weighted <- sim_results$Sp_OVERALL_all_tests_all_thresholds[index_test_chosen_index, 1:n_thr]*100 ; true_Sp_OVERALL_weighted 
+##
+
+true_Se_OVERALL - true_Se_OVERALL_weighted
+true_Sp_OVERALL - true_Sp_OVERALL_weighted
 
 
 ## Apply missing thresholds:

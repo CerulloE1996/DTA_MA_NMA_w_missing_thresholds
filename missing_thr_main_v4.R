@@ -221,14 +221,14 @@ options(scipen = 999999999999)
 
 
 #### --------- Select model type:
-# Model_type <- "Jones"
+ Model_type <- "Jones"
 ##
 #### --------- Models w/ free + independent scale parameterss in D+ and D- groups:
-Model_type <- "Cerullo_Xu_FIXED_cutpoints"!
-Model_type <- "Cerullo_Xu_RANDOM_cutpoints"
-##
-Model_type <- "Cerullo_Gat_FIXED_cutpoints"!
-Model_type <- "Cerullo_Gat_RANDOM_cutpoints"
+# Model_type <- "Cerullo_Xu_FIXED_cutpoints"
+# Model_type <- "Cerullo_Xu_RANDOM_cutpoints"
+# ##
+# Model_type <- "Cerullo_Gat_FIXED_cutpoints"
+ Model_type <- "Cerullo_Gat_RANDOM_cutpoints"
 ##
 
 
@@ -256,12 +256,28 @@ cutpoint_param <- "sigma"
   
            if (Model_type == "Jones") {
              
+                             Stan_data_list$prior_raw_scale_mu_mean <- rep(0.50, 2)
+                             Stan_data_list$prior_raw_scale_mu_SD   <- rep(1.00, 2)
+                             Stan_data_list$prior_raw_scale_SD_mean <- rep(0.0, 2)
+                             Stan_data_list$prior_raw_scale_SD_SD   <- rep(0.50, 2)
+                             ##
                              Stan_data_list$prior_boxcox_lambda_mean <- rep(0.0, 2)
-                             Stan_data_list$prior_boxcox_lambda_SD   <- rep(1.0, 2)
+                             Stan_data_list$prior_boxcox_lambda_SD   <- rep(2.5, 2)
+                             ##
                              Stan_data_list$prior_beta_mu_mean <- rep(0.0, 2)
-                             Stan_data_list$prior_beta_mu_SD   <- rep(5.0, 2)
+                             Stan_data_list$prior_beta_mu_SD   <- rep(2.5, 2)
                              Stan_data_list$prior_beta_SD_mean <- rep(0.0, 2)
-                             Stan_data_list$prior_beta_SD_SD   <- rep(5.0, 2)
+                             Stan_data_list$prior_beta_SD_SD   <- rep(2.5, 2)
+                             ##
+                             Stan_init_list$beta_mu <- c(-1, +1)
+                             Stan_init_list$beta_SD <- rep(0.001, 2)
+                             Stan_init_list$beta_z <-  array(0.001, dim = c(2, n_studies))
+                             ##
+                             Stan_init_list$raw_scale_mu <- c(+1, + 1)
+                             Stan_init_list$raw_scale_SD <- rep(0.001, 2)
+                             Stan_init_list$raw_scale_z <-  array(0.001, dim = c(2, n_studies))
+                             ##
+                             Stan_init_list$lambda <- 1.0
                              ##
                              file <- file.path(getwd(), "stan_models", "DTA_MA_JONES_BOXCOX.stan")
                          
@@ -274,6 +290,13 @@ cutpoint_param <- "sigma"
              
            } else if (Model_type == "Cerullo_Xu_RANDOM_cutpoints") {
              
+                             Stan_data_list$kappa_lb <- 0
+                             ##
+                             Stan_data_list$prior_beta_mu_mean <- 0.0
+                             Stan_data_list$prior_beta_mu_SD   <- 1.0
+                             Stan_data_list$prior_beta_SD_mean <- 0.0
+                             Stan_data_list$prior_beta_SD_SD   <- 0.50
+                             ##
                              Stan_init_list$C_nd <-   t(array(dim = c(n_thr, n_studies), data = seq(from = -2.0, to = 2.0, length = n_thr)))
                              Stan_init_list$C_d  <-   t(array(dim = c(n_thr, n_studies), data = seq(from = -2.0, to = 2.0, length = n_thr)))
                              Stan_init_list$log_alpha <- (array(log(1.01), dim = c(1, n_cat)))
@@ -325,7 +348,19 @@ cutpoint_param <- "sigma"
                              file <- file.path(getwd(), "stan_models", "DTA_MA_Gat_FIXEDthr_SD.stan")
                            
              } else if (Model_type == "Cerullo_Gat_RANDOM_cutpoints") {
-                           
+               
+                             Stan_data_list$kappa_lb <- 0
+                             ##
+                             Stan_data_list$prior_beta_mu_mean <- 0.0
+                             Stan_data_list$prior_beta_mu_SD   <- 1.0
+                             Stan_data_list$prior_beta_SD_mean <- 0.0
+                             Stan_data_list$prior_beta_SD_SD   <- 0.50
+                             ##
+                             Stan_data_list$prior_raw_scale_mu_mean <- 0.50
+                             Stan_data_list$prior_raw_scale_mu_SD   <- 1.00
+                             Stan_data_list$prior_raw_scale_SD_mean <- 0.0
+                             Stan_data_list$prior_raw_scale_SD_SD   <- 0.50
+                             ##
                              Stan_init_list$C_nd <-   t(array(dim = c(n_thr, n_studies), data = seq(from = -2.0, to = 2.0, length = n_thr)))
                              ##
                              Stan_init_list$beta_mu <- 0.001
@@ -380,11 +415,11 @@ cutpoint_param <- "sigma"
           
           seed <- 123
           
-          n_chains <- 4
+          n_chains <- 16
           init_lists_per_chain <- rep(list(Stan_init_list), n_chains) 
           
           n_burnin <- 500
-          n_iter   <- 500
+          n_iter   <- 2000
           
           tictoc::tic()
           
@@ -495,10 +530,6 @@ cutpoint_param <- "sigma"
         message(paste("Overall Deviance in non-diseased group (D+) = "))
         print( sum(dev_d_medians,  na.rm = TRUE) )
         
-        # ## Model fit / evaluation:
-        # true_Se_OVERALL <- sim_results$Se_OVERALL_all_tests_all_thresholds[index_test_chosen_index, 1:n_thr]*100  ; true_Se_OVERALL
-        # true_Sp_OVERALL <- sim_results$Sp_OVERALL_all_tests_all_thresholds[index_test_chosen_index, 1:n_thr]*100  ; true_Sp_OVERALL
-        
         try({  
         {
             message(paste("Se (diffs) = "))
@@ -507,15 +538,15 @@ cutpoint_param <- "sigma"
             est_Se_OVERALL_mean <- est_Se_OVERALL$mean*100
             est_Se_OVERALL_median <- est_Se_OVERALL$median*100
             ##
-            print( abs(round(est_Se_OVERALL_median, 3) - round(true_Se_OVERALL, 3)) )
+            print( abs(round(est_Se_OVERALL_median, 3) - round(true_Se_OVERALL_weighted, 3)) )
             message(paste("Se (SUM of abs. diffs) = "))
-            print( sum(abs(round(est_Se_OVERALL_median, 3) - round(true_Se_OVERALL, 3))) )
+            print( sum(abs(round(est_Se_OVERALL_median, 3) - round(true_Se_OVERALL_weighted, 3))) )
             message(paste("Se (MEAN of abs. diffs) = "))
-            print( mean(abs(round(est_Se_OVERALL_median, 3) - round(true_Se_OVERALL, 3))) )
+            print( mean(abs(round(est_Se_OVERALL_median, 3) - round(true_Se_OVERALL_weighted, 3))) )
             message(paste("Se (MEDIAN of abs. diffs) = "))
-            print( median(abs(round(est_Se_OVERALL_median, 3) - round(true_Se_OVERALL, 3))) )
+            print( median(abs(round(est_Se_OVERALL_median, 3) - round(true_Se_OVERALL_weighted, 3))) )
             message(paste("Se (MAX of abs. diffs) = "))
-            print( max(abs(round(est_Se_OVERALL_median, 3) - round(true_Se_OVERALL, 3))) )
+            print( max(abs(round(est_Se_OVERALL_median, 3) - round(true_Se_OVERALL_weighted, 3))) )
             
             message(paste("Sp (diffs) = "))
             ##
@@ -523,15 +554,15 @@ cutpoint_param <- "sigma"
             est_Sp_OVERALL_mean <- est_Sp_OVERALL$mean*100
             est_Sp_OVERALL_median <- est_Sp_OVERALL$median*100
             ##
-            print( abs(round(est_Sp_OVERALL_median, 3) - round(true_Sp_OVERALL, 3)) )
+            print( abs(round(est_Sp_OVERALL_median, 3) - round(true_Sp_OVERALL_weighted, 3)) )
             message(paste("Sp (SUM of abs. diffs) = "))
-            print( sum(abs(round(est_Sp_OVERALL_median, 3) - round(true_Sp_OVERALL, 3))) )
+            print( sum(abs(round(est_Sp_OVERALL_median, 3) - round(true_Sp_OVERALL_weighted, 3))) )
             message(paste("Sp (MEAN of abs. diffs) = "))
-            print( mean(abs(round(est_Sp_OVERALL_median, 3) - round(true_Sp_OVERALL, 3))) )
+            print( mean(abs(round(est_Sp_OVERALL_median, 3) - round(true_Sp_OVERALL_weighted, 3))) )
             message(paste("Sp (MEDIAN of abs. diffs) = "))
-            print( median(abs(round(est_Sp_OVERALL_median, 3) - round(true_Sp_OVERALL, 3))) )
+            print( median(abs(round(est_Sp_OVERALL_median, 3) - round(true_Sp_OVERALL_weighted, 3))) )
             message(paste("Sp (MAX of abs. diffs) = "))
-            print( max(abs(round(est_Sp_OVERALL_median, 3) - round(true_Sp_OVERALL, 3))) )
+            print( max(abs(round(est_Sp_OVERALL_median, 3) - round(true_Sp_OVERALL_weighted, 3))) )
         }
         })
         
@@ -562,133 +593,298 @@ cutpoint_param <- "sigma"
         }
         
         message(paste("Model_type = ", Model_type))
-        
-        # 
-        # dev.off()
-        plot( x = 100.0 - est_Sp_OVERALL_mean, y = est_Se_OVERALL_mean, col = "blue")
-        lines(x = 100.0 - true_Sp_OVERALL,     y = true_Se_OVERALL,     col = "green")
-        # 
 
-   
-        true_Sp_OVERALL
-        ##
-        true_Se_OVERALL
-        Stan_mod_sample$summary(c("Se_MU"))  %>% print(n = 100)
-        Stan_mod_sample$summary(c("Se_MED"))  %>% print(n = 100)
         
-        Stan_mod_sample$summary(c("beta_mu"))  %>% print(n = 100)
-        Stan_mod_sample$summary(c("beta_SD"))  %>% print(n = 100)
-        
-       ## Stan_mod_sample$summary(c("C"))  %>% print(n = 100)
-        
-        try({ 
-          Stan_mod_sample$summary(c("C_mu"))  %>% print(n = 100)
-        })
-        try({ 
-          Stan_mod_sample$summary(c("C_MU")) %>% print(n = 100)
-          Stan_mod_sample$summary(c("C_MED")) %>% print(n = 100)
-        })
-        try({ 
-          Se_MU <- Stan_mod_sample$summary(c("Se_MU")) ##%>% print(n = 100)
-          Se_MU <- Se_MU$mean
-          true_Se_OVERALL - Se_MU*100
-          # ##
-          # Se_MED <- Stan_mod_sample$summary(c("Se_MED")) ##%>% print(n = 100)
-          # Se_MED <- Se_MED$mean
-          # true_Se_OVERALL - Se_MED*100
-          # ##
-          Se_EMP <- Stan_mod_sample$summary(c("Se_EMP")) ##%>% print(n = 100)
-          Se_EMP <- Se_EMP$mean
-          true_Se_OVERALL - Se_EMP*100
-          # ##
-          # Se_SIM_MED <- Stan_mod_sample$summary(c("Se_SIM_MED")) ##%>% print(n = 100)
-          # Se_SIM_MED <- Se_SIM_MED$mean
-          # true_Se_OVERALL - Se_SIM_MED*100
-          # ##
-          # Se_SIM_MU <- Stan_mod_sample$summary(c("Se_SIM_MU")) ##%>% print(n = 100)
-          # Se_SIM_MU <- Se_SIM_MU$mean
-          # true_Se_OVERALL - Se_SIM_MU*100
+       #  # dev.off()
+       #  plot( x = 100.0 - est_Sp_OVERALL_mean, y = est_Se_OVERALL_mean, col = "blue")
+       #  lines(x = 100.0 - true_Sp_OVERALL_weighted,     y = true_Se_OVERALL_weighted,     col = "green")
+       #  # 
+       # 
+       # 
+       #  true_Sp_OVERALL_weighted
+       #  ##
+       #  true_Se_OVERALL_weighted
+       #  try({ 
+       #      Stan_mod_sample$summary(c("Se_MU"))  %>% print(n = 100)
+       #      Stan_mod_sample$summary(c("Se_MED"))  %>% print(n = 100)
+       #  })
+       #  try({ 
+       #      Stan_mod_sample$summary(c("beta_mu"))  %>% print(n = 100)
+       #      Stan_mod_sample$summary(c("beta_SD"))  %>% print(n = 100)
+       #  })
+       #  
+       # ## Stan_mod_sample$summary(c("C"))  %>% print(n = 100)
+       #  
+       #  try({ 
+       #    Stan_mod_sample$summary(c("C_mu"))  %>% print(n = 100)
+       #  })
+       #  try({ 
+       #    Stan_mod_sample$summary(c("C_MU")) %>% print(n = 100)
+       #    Stan_mod_sample$summary(c("C_MED")) %>% print(n = 100)
+       #  })
+       #  try({ 
+       #    Se_MU <- Stan_mod_sample$summary(c("Se_MU")) ##%>% print(n = 100)
+       #    Se_MU <- Se_MU$mean
+       #    true_Se_OVERALL_weighted - Se_MU*100
+       #    # ##
+       #    # Se_MED <- Stan_mod_sample$summary(c("Se_MED")) ##%>% print(n = 100)
+       #    # Se_MED <- Se_MED$mean
+       #    # true_Se_OVERALL_weighted - Se_MED*100
+       #    # ##
+       #    Se_EMP <- Stan_mod_sample$summary(c("Se_EMP")) ##%>% print(n = 100)
+       #    Se_EMP <- Se_EMP$mean
+       #    true_Se_OVERALL_weighted - Se_EMP*100
+       #    # ##
+       #    # Se_SIM_MED <- Stan_mod_sample$summary(c("Se_SIM_MED")) ##%>% print(n = 100)
+       #    # Se_SIM_MED <- Se_SIM_MED$mean
+       #    # true_Se_OVERALL_weighted - Se_SIM_MED*100
+       #    # ##
+       #    # Se_SIM_MU <- Stan_mod_sample$summary(c("Se_SIM_MU")) ##%>% print(n = 100)
+       #    # Se_SIM_MU <- Se_SIM_MU$mean
+       #    # true_Se_OVERALL_weighted - Se_SIM_MU*100
+       #    ##
+       #    true_Se_OVERALL_weighted
+       #    true_Se_OVERALL_weighted[4:7]
+       #  })
+       #  ##
+       #  try({ 
+       #    Stan_mod_sample$summary(c("Sp_MU")) %>% print(n = 100)
+       #    Stan_mod_sample$summary(c("Sp_MED")) %>% print(n = 100)
+       #    Stan_mod_sample$summary(c("Sp_EMP")) %>% print(n = 100)
+       #    # Stan_mod_sample$summary(c("Sp_SIM")) %>% print(n = 100)
+       #    # Stan_mod_sample$summary(c("Sp_SIM_MED")) %>% print(n = 100)
+       #    # Stan_mod_sample$summary(c("Sp_SIM_MU")) %>% print(n = 100)
+       #    true_Sp_OVERALL_weighted
+       #    true_Sp_OVERALL_weighted[4:7]
+       #  })
+       #  ##
+       #  # try({ 
+       #  #   Stan_mod_sample$summary(c("C_MU")) %>% print(n = 100)
+       #  #   Stan_mod_sample$summary(c("C_SD")) %>% print(n = 100)
+       #  #   Stan_mod_sample$summary(c("C_empirical")) %>% print(n = 100)
+       #  # })
+       #  ##
+       #  # try({
+       #  #   Stan_mod_sample$summary(c("unc_C_normal_SD_sq"))  %>% print(n = 100)
+       #    # Stan_mod_sample$summary(c("raw_MU"))  %>% print(n = 100)
+       #    # Stan_mod_sample$summary(c("raw_SD"))  %>% print(n = 100)
+       #    # Stan_mod_sample$summary(c("log_increment_SD"))  %>% print(n = 100)
+       #    ##
+       #  try({
+       #    Stan_mod_sample$summary(c("category_means"))  %>% print(n = 100)
+       #    Stan_mod_sample$summary(c("category_SDs"))  %>% print(n = 100)
+       #    Stan_mod_sample$summary(c("kappa"))  %>% print(n = 100)
+       #  })
+       #  # })
+       #  # try({ 
+       #  #   Stan_mod_sample$summary(c("C_mu_empirical"))  %>% print(n = 100)
+       #  # })
+       #  # try({ 
+       #  #   Stan_mod_sample$summary(c("C_mu_medians"))  %>% print(n = 100)
+       #  # })
+       #  # ##
+       #  # # Stan_mod_sample$summary(c("prob_ord_mu"))  %>% print(n = 100)
+       #  # # Stan_mod_sample$summary(c("prob_cumul_mu"))  %>% print(n = 100)
+       #  # ##
+       #  # try({  
+       #  # Stan_mod_sample$summary(c("alpha")) %>% print(n = 100)
+       #  # alpha <- Stan_mod_sample$summary(c("alpha"),  quantiles = ~ quantile(., probs = c(0.025, 0.50, 0.975)))  %>% print(n = 100)
+       #  # # alpha_raw <- Stan_mod_sample$summary(c("alpha_raw"))  %>% print(n = 100)
+       #  # # 100*c(alpha$mean)
+       #  # })
+       #  # ##
+       #  # try({ 
+       #  #   Stan_mod_sample$summary(c("kappa")) %>% print(n = 100)
+       #  # })
+       #  # try({ 
+       #  #   Stan_mod_sample$summary(c("unc_C_normal_SD")) %>% print(n = 100)
+       #  #   Stan_mod_sample$summary(c("unc_C_normal_MU")) %>% print(n = 100)
+       #  #   Stan_mod_sample$summary(c("unc_C_normal_MED")) %>% print(n = 100)
+       #  # })
+       #  # 
+       #  # print(mean(inf_dir_samples$alpha))
+       #  # print(quantile(inf_dir_samples$alpha, c(0.025, 0.50, 0.975)))
+       #  # 
+       #  # 
+       #  # Stan_mod_sample$summary(c("prob_cumul_mu"))  %>% print(n = 100)
+       #  try({
+       #    Stan_mod_sample$summary(c("location_MU_nd")) %>% print(n = 100)
+       #    Stan_mod_sample$summary(c("location_MU_d")) %>% print(n = 100)
+       #    Stan_mod_sample$summary(c("scale_MU_nd")) %>% print(n = 100)
+       #    Stan_mod_sample$summary(c("scale_MU_d")) %>% print(n = 100)
+       #  })
+       #    ## 
+       #  try({
+       #    Stan_mod_sample$summary(c("expected_p_ord")) %>% print(n = 100)
+       #    Stan_mod_sample$summary(c("dirichlet_cat_means_phi")) %>% print(n = 100)
+       #  })
           ##
-          true_Se_OVERALL
-          true_Se_OVERALL[4:7]
-        })
-        ##
-        try({ 
-          Stan_mod_sample$summary(c("Sp_MU")) %>% print(n = 100)
-          Stan_mod_sample$summary(c("Sp_MED")) %>% print(n = 100)
-          Stan_mod_sample$summary(c("Sp_EMP")) %>% print(n = 100)
-          # Stan_mod_sample$summary(c("Sp_SIM")) %>% print(n = 100)
-          # Stan_mod_sample$summary(c("Sp_SIM_MED")) %>% print(n = 100)
-          # Stan_mod_sample$summary(c("Sp_SIM_MU")) %>% print(n = 100)
-          true_Sp_OVERALL
-          true_Sp_OVERALL[4:7]
-        })
-        ##
-        # try({ 
-        #   Stan_mod_sample$summary(c("C_MU")) %>% print(n = 100)
-        #   Stan_mod_sample$summary(c("C_SD")) %>% print(n = 100)
-        #   Stan_mod_sample$summary(c("C_empirical")) %>% print(n = 100)
-        # })
-        ##
-        # try({
-        #   Stan_mod_sample$summary(c("unc_C_normal_SD_sq"))  %>% print(n = 100)
-          # Stan_mod_sample$summary(c("raw_MU"))  %>% print(n = 100)
-          # Stan_mod_sample$summary(c("raw_SD"))  %>% print(n = 100)
-          # Stan_mod_sample$summary(c("log_increment_SD"))  %>% print(n = 100)
+        try({
+          Stan_mod_sample$summary(c("beta_mu")) %>% print(n = 100)
+          Stan_mod_sample$summary(c("beta_SD")) %>% print(n = 100)
+          Stan_mod_sample$summary(c("raw_scale_mu")) %>% print(n = 100)
+          Stan_mod_sample$summary(c("raw_scale_SD")) %>% print(n = 100)
           ##
-          Stan_mod_sample$summary(c("category_means"))  %>% print(n = 100)
-          Stan_mod_sample$summary(c("category_SDs"))  %>% print(n = 100)
-          Stan_mod_sample$summary(c("kappa"))  %>% print(n = 100)
-        # })
-        # try({ 
-        #   Stan_mod_sample$summary(c("C_mu_empirical"))  %>% print(n = 100)
-        # })
-        # try({ 
-        #   Stan_mod_sample$summary(c("C_mu_medians"))  %>% print(n = 100)
-        # })
-        # ##
-        # # Stan_mod_sample$summary(c("prob_ord_mu"))  %>% print(n = 100)
-        # # Stan_mod_sample$summary(c("prob_cumul_mu"))  %>% print(n = 100)
-        # ##
-        # try({  
-        # Stan_mod_sample$summary(c("alpha")) %>% print(n = 100)
-        # alpha <- Stan_mod_sample$summary(c("alpha"),  quantiles = ~ quantile(., probs = c(0.025, 0.50, 0.975)))  %>% print(n = 100)
-        # # alpha_raw <- Stan_mod_sample$summary(c("alpha_raw"))  %>% print(n = 100)
-        # # 100*c(alpha$mean)
-        # })
-        # ##
-        # try({ 
-        #   Stan_mod_sample$summary(c("kappa")) %>% print(n = 100)
-        # })
-        # try({ 
-        #   Stan_mod_sample$summary(c("unc_C_normal_SD")) %>% print(n = 100)
-        #   Stan_mod_sample$summary(c("unc_C_normal_MU")) %>% print(n = 100)
-        #   Stan_mod_sample$summary(c("unc_C_normal_MED")) %>% print(n = 100)
-        # })
-        # 
-        # print(mean(inf_dir_samples$alpha))
-        # print(quantile(inf_dir_samples$alpha, c(0.025, 0.50, 0.975)))
-        # 
-        # 
-        # Stan_mod_sample$summary(c("prob_cumul_mu"))  %>% print(n = 100)
+          Stan_mod_sample$summary(c("lambda")) %>% print(n = 100)
           
-          Stan_mod_sample$summary(c("location_MU_nd")) %>% print(n = 100)
-          Stan_mod_sample$summary(c("location_MU_d")) %>% print(n = 100)
-          Stan_mod_sample$summary(c("scale_MU_nd")) %>% print(n = 100)
-          Stan_mod_sample$summary(c("scale_MU_d")) %>% print(n = 100)
-          ## 
-          Stan_mod_sample$summary(c("expected_p_ord")) %>% print(n = 100)
-          Stan_mod_sample$summary(c("dirichlet_cat_means_phi")) %>% print(n = 100)
+        })
+        try({
+        Stan_mod_sample$summary(c("Se")) %>% print(n = 100)
+        Stan_mod_sample$summary(c("Sp")) %>% print(n = 100)
+        })
+        try({
+          Se <- Stan_mod_sample$summary(c("Se"), quantiles = ~ quantile(., probs = c(0.025, 0.50, 0.975))) %>% print(n = 100)
+          Se_pred <- Stan_mod_sample$summary(c("Se_pred"), quantiles = ~ quantile(., probs = c(0.025, 0.50, 0.975))) %>% print(n = 100)
           ##
-          Stan_mod_sample$summary(c("Se")) %>% print(n = 100)
-          Stan_mod_sample$summary(c("Se_pred")) %>% print(n = 100)
+          Sp <- Stan_mod_sample$summary(c("Sp"), quantiles = ~ quantile(., probs = c(0.025, 0.50, 0.975))) %>% print(n = 100)
+          Sp_pred <- Stan_mod_sample$summary(c("Sp_pred"), quantiles = ~ quantile(., probs = c(0.025, 0.50, 0.975))) %>% print(n = 100)
           ##
-          Stan_mod_sample$summary(c("Sp")) %>% print(n = 100)
-          Stan_mod_sample$summary(c("Sp_pred")) %>% print(n = 100)
+          Fp <- Stan_mod_sample$summary(c("Fp"), quantiles = ~ quantile(., probs = c(0.025, 0.50, 0.975))) %>% print(n = 100)
+          Fp_pred <- Stan_mod_sample$summary(c("Fp_pred"), quantiles = ~ quantile(., probs = c(0.025, 0.50, 0.975))) %>% print(n = 100)
+        })
           
         
         
 }
+
+
+df_true <- tibble(Se_true = true_Se_OVERALL_weighted/100, Sp_true = true_Sp_OVERALL_weighted/100, Fp_true = (100 - true_Sp_OVERALL_weighted)/100)
+
+if (Model_type == "Cerullo_Gat_RANDOM_cutpoints") {
+  
+        ###
+        df_Cerullo_Se <- tibble(Se_median = Se$`50%`, Se_lower = Se$`2.5%`, Se_upper = Se$`97.5%`, Se_pred_lower = Se_pred$`2.5%`, Se_pred_upper = Se_pred$`97.5%`)
+        df_Cerullo_Sp <- tibble(Sp_median = Sp$`50%`, Sp_lower = Sp$`2.5%`, Sp_upper = Sp$`97.5%`, Sp_pred_lower = Sp_pred$`2.5%`, Sp_pred_upper = Sp_pred$`97.5%`)
+        df_Cerullo_Fp <- tibble(Fp_median = Fp$`50%`, Fp_lower = Fp$`2.5%`, Fp_upper = Fp$`97.5%`, Fp_pred_lower = Fp_pred$`2.5%`, Fp_pred_upper = Fp_pred$`97.5%`)
+        df_Cerullo <- tibble(cbind(df_Cerullo_Se, df_Cerullo_Sp, df_Cerullo_Fp)) %>%
+          dplyr::mutate(Model = rep("Cerullo", n_thr))
+        ##
+        df_Cerullo <- tibble(cbind(df_true, df_Cerullo)) ; df_Cerullo
+        
+} else if (Model_type == "Jones") { 
+  
+        ###
+        df_Jones_Se <- tibble(Se_median = Se$`50%`, Se_lower = Se$`2.5%`, Se_upper = Se$`97.5%`, Se_pred_lower = Se_pred$`2.5%`, Se_pred_upper = Se_pred$`97.5%`)
+        df_Jones_Sp <- tibble(Sp_median = Sp$`50%`, Sp_lower = Sp$`2.5%`, Sp_upper = Sp$`97.5%`, Sp_pred_lower = Sp_pred$`2.5%`, Sp_pred_upper = Sp_pred$`97.5%`)
+        df_Jones_Fp <- tibble(Fp_median = Fp$`50%`, Fp_lower = Fp$`2.5%`, Fp_upper = Fp$`97.5%`, Fp_pred_lower = Fp_pred$`2.5%`, Fp_pred_upper = Fp_pred$`97.5%`)
+        df_Jones <- tibble(cbind(df_Jones_Se, df_Jones_Sp, df_Jones_Fp)) %>%
+          dplyr::mutate(Model = rep("Jones", n_thr))
+        ##
+        df_Jones <- tibble(cbind(df_true, df_Jones)) ; df_Jones
+        
+}
+
+
+# Improved function that handles column renaming correctly
+create_confidence_polygon <- function(df, 
+                                      model_name) {
+  
+        # Create upper curve (high sensitivity, low false positive)
+        upper <- df %>% 
+          filter(Model == model_name) %>%
+          select(x = Fp_lower, y = Se_upper) %>%
+          arrange(x)
+        
+        # Create lower curve (low sensitivity, high false positive)
+        lower <- df %>% 
+          filter(Model == model_name) %>%
+          select(x = Fp_upper, y = Se_lower) %>%
+          arrange(desc(x))
+        
+        # Combine into a closed polygon
+        out <- tibble(bind_rows(upper, lower))
+        n_rows <- nrow(out)
+        out <- out %>%
+          mutate(Model = rep(model_name, n_rows))
+        
+}
+
+# Create prediction interval polygon function
+create_prediction_polygon <- function(df, 
+                                      model_name) {
+  
+        # Create upper curve (high sensitivity, low false positive)
+        upper <- df %>% 
+          filter(Model == model_name) %>%
+          select(x = Fp_pred_lower, 
+                 y = Se_pred_upper) %>% 
+          arrange(x)
+        
+        # Create lower curve (low sensitivity, high false positive)
+        lower <- df %>% 
+          filter(Model == model_name) %>%
+          select(x = Fp_pred_upper, 
+                 y = Se_pred_lower) %>%
+          arrange(desc(x))
+        
+        # Combine into a closed polygon
+        out <- tibble(bind_rows(upper, lower))
+        n_rows <- nrow(out)
+        out <- out %>%
+               mutate(Model = rep(model_name, n_rows))
+  
+}
+
+
+Cerullo_polygon_Conf <- create_confidence_polygon(df = df_Cerullo, model_name = "Cerullo") ; Cerullo_polygon_Conf
+Jones_polygon_Conf   <- create_confidence_polygon(df = df_Jones,   model_name = "Jones")   ; Jones_polygon_Conf
+##
+
+Cerullo_polygon_Pred <- create_prediction_polygon(df = df_Cerullo, model_name = "Cerullo") ; Cerullo_polygon_Pred
+Jones_polygon_Pred   <- create_prediction_polygon(df = df_Jones,   model_name = "Jones")   ; Jones_polygon_Pred
+
+
+df_all <- rbind(df_Jones, df_Cerullo)
+
+df_Jones$Se_median - 
+df_Cerullo$Se_median
+
+## --------- Plot 1:
+ggplot(data = df_all, 
+       mapping = aes(x = Fp_median, y = Se_median, color = Model)) + 
+  geom_line(size = 0.5) + 
+  geom_point(size = 3) + 
+  geom_point(color = "green", size = 3, data = df_all, mapping = aes(x = Fp_true, y = Se_true)) +
+  geom_line(color = "green",  size = 0.5, data = df_all, mapping = aes(x = Fp_true, y = Se_true)) + 
+  theme_bw(base_size = 16)
+
+
+
+## --------- Plot 2:
+ggplot(data = df_all, 
+       mapping = aes(x = Fp_median, y = Se_median, color = Model)) + 
+  # geom_line(size = 0.5) + 
+  # geom_point(size = 3) + 
+  # geom_point(color = "green", size = 3, data = df_all, mapping = aes(x = Fp_true, y = Se_true)) +
+  # geom_line(color = "green",  size = 0.5, data = df_all, mapping = aes(x = Fp_true, y = Se_true)) + 
+  theme_bw(base_size = 16) +
+  geom_polygon(data = Cerullo_polygon_Conf, aes(x = x, y = y), fill = "red",  alpha = 0.75) +
+  geom_polygon(data = Jones_polygon_Conf,   aes(x = x, y = y), fill = "cyan", alpha = 0.75) +
+  geom_polygon(data = Cerullo_polygon_Pred, aes(x = x, y = y), fill = "red",  alpha = 0.25) + 
+  geom_polygon(data = Jones_polygon_Pred,   aes(x = x, y = y), fill = "cyan", alpha = 0.25)
+  
+
+Cerullo_polygon$Fp_lower
+Cerullo_polygon$Fp_upper
+
+Cerullo_polygon$Se_lower
+Cerullo_polygon$Se_upper
+
+  # geom_ribbon(data = df_all, mapping  = aes(ymin = Se_lower, ymax = Se_upper, fill = Model)) + 
+  # geom_ribbon(data = df_all, mapping  = aes(xmin = Fp_lower, xmax = Fp_upper, fill = Model))
+  # geom_ribbon(data = df_all, mapping  = aes(ymin = Se_pred_lower, ymax = Se_upper, fill = Model)) + 
+  # geom_ribbon(data = df_all, mapping  = aes(ymin = Fp_pred_lower, ymax = Fp_pred_upper, fill = Model))
+
+
+ geom_ribbon()
+
+
+  # geom_point(color = "red",   size = 4, data = df_all, mapping = aes(x = Fp_true, y = Se_true)) + 
+  # geom_line(color = "red",    size = 1, data = df_all, mapping = aes(x = Fp_true, y = Se_true)) + 
+  # theme_bw(base_size = 16)
+  
+  
+
 
 mu <- 0.50
 sigma <- 1.10

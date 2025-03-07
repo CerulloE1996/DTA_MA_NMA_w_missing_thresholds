@@ -10,6 +10,9 @@
  # assume_perfect_GS <- 1
  # seed <- 123
  
+
+
+
 ## -| ------------------ R function to simulate a meta-analysis dataset for (binary + ordinal) LC_MVP  --------------------------------------------
  
  
@@ -104,6 +107,11 @@ simulate_binary_and_ordinal_MA_LC_MVP_data <- function(   n_studies = 25,
      
      s <- 1
      t <- 2
+     
+     100*(1.0 - pnorm((Mean_thresholds_for_test_3 - location_d[3])/exp(scale_nd[3])))
+     true_Se_OVERALL
+     
+     pnorm(location_d[3] - Mean_thresholds_for_test_3 )
      
      Se_for_current_study_at_threshold_0_list <- Sp_for_current_study_at_threshold_0_list <- Fp_for_current_study_at_threshold_0_list <- list()
      Se_per_study_all_tests_all_thresholds_list <- Sp_per_study_all_tests_all_thresholds_list <- list()
