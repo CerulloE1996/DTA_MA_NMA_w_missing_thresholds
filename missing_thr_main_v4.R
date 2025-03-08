@@ -786,6 +786,8 @@ if (Model_type == "Cerullo_Gat_RANDOM_cutpoints") {
 }
 
 
+
+
 # Improved function that handles column renaming correctly
 create_confidence_polygon <- function(df, 
                                       model_name) {
@@ -809,6 +811,9 @@ create_confidence_polygon <- function(df,
           mutate(Model = rep(model_name, n_rows))
         
 }
+
+
+
 
 # Create prediction interval polygon function
 create_prediction_polygon <- function(df, 
@@ -835,6 +840,8 @@ create_prediction_polygon <- function(df,
                mutate(Model = rep(model_name, n_rows))
   
 }
+
+
 
 
 Cerullo_polygon_Conf <- create_confidence_polygon(df = df_Cerullo, model_name = "Cerullo") ; Cerullo_polygon_Conf
@@ -891,440 +898,529 @@ ggplot(data = df_all,
 
 
 
+x_individual_nd <- categorical_to_individual( Stan_data_list$x_cat[[1]], 
+                                              binary_disease_indicator = 0, 
+                                              missing_indicator = -1)
+
+x_individual_d <- categorical_to_individual(  Stan_data_list$x_cat[[2]], 
+                                              binary_disease_indicator = 1, 
+                                              missing_indicator = -1)
+
+
+x_individual_nd ## %>% print(n = 10000)
+x_individual_d
+
+x_individual <- tibble(rbind(x_individual_nd, x_individual_d))
 
 
 
+require(MASS)
+require(gridExtra) 
+
+
+individual_obs_tibble <- x_individual_nd
+group_name <- "non-diseased"
+study_index <- 1
+
+
+plot_distribution_fits(individual_obs_tibble = x_individual_nd,
+                       group_name = "non-diseased")
+                       
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-Cerullo_polygon$Fp_lower
-Cerullo_polygon$Fp_upper
-
-Cerullo_polygon$Se_lower
-Cerullo_polygon$Se_upper
-
-  # geom_ribbon(data = df_all, mapping  = aes(ymin = Se_lower, ymax = Se_upper, fill = Model)) + 
-  # geom_ribbon(data = df_all, mapping  = aes(xmin = Fp_lower, xmax = Fp_upper, fill = Model))
-  # geom_ribbon(data = df_all, mapping  = aes(ymin = Se_pred_lower, ymax = Se_upper, fill = Model)) + 
-  # geom_ribbon(data = df_all, mapping  = aes(ymin = Fp_pred_lower, ymax = Fp_pred_upper, fill = Model))
-
-
- geom_ribbon()
-
-
-  # geom_point(color = "red",   size = 4, data = df_all, mapping = aes(x = Fp_true, y = Se_true)) + 
-  # geom_line(color = "red",    size = 1, data = df_all, mapping = aes(x = Fp_true, y = Se_true)) + 
-  # theme_bw(base_size = 16)
+# Function to compare diseased and non-diseased distributions
+compare_distributions <- function(x_cat_nd, x_cat_d, study_index = 1) {
+  p1 <- plot_distribution_fits(x_cat_nd, study_index, "Non-diseased")
+  p2 <- plot_distribution_fits(x_cat_d, study_index, "Diseased")
   
-  
-
-
-mu <- 0.50
-sigma <- 1.10
-
-log_X <- rnorm(n = 100000, mean = mu, sd = sigma)
-
-X <- exp(log_X)
-
-plot(density(X), xlim  = c(0, 10))
-     
-
-mu_X <- exp(mu + 0.5*sigma^2) ; mu_X ; mean(X)
-med_X <- exp(mu) ; med_X ; median(X)
-sd_X <- sqrt((exp(sigma^2) - 1) * exp(2*mu + sigma^2)) ; sd_X ; sd(X)
-
-quantile_X_lower <- exp(mu + sigma*qnorm(0.16)) ; quantile_X_lower
-quantile_X_upper <- exp(mu + sigma*qnorm(1 - 0.16)) ; quantile_X_upper
-
-exp(mu + sigma*qnorm(0.50))
-
-sd_from_q_X <- (log(quantile_X_upper) - log(quantile_X_lower))/2
-
-sd_from_q_X <- sqrt((quantile_X_upper-med_X)*(med_X-quantile_X_lower)) ; sd_from_q_X
-
-
-sd_X_from_quantile <- 
-
-plot(density(rnorm(n = 10000, mean = med_X, sd = sd_X)))
-
-true_Se_OVERALL[4:7]
-
-
-Stan_mod_sample$summary(c("prob_cumul_mu"))  %>% print(n = 100)
-
-
-softmax <- function(x) { 
-   return(log(1 + exp(x)))
-}
-softmax_inv <- function(x) { 
-   return(log(- 1 + exp(x)))
+  grid.arrange(p1, p2, ncol = 1)
 }
 
-log1p_exp <- softmax
+# Example usage for a specific study
+# Assuming x_cat_nd is your non-diseased data and x_cat_d is your diseased data
+# compare_distributions(x_cat[[1]], x_cat[[2]], 1)
 
-
-
-median_softmax_X_from_X_normal <- function( unc_C_normal_MU, 
-                                            unc_C_normal_SD) {
-  
-        if (unc_C_normal_MU > 5.0) {
-          
-                    unc_C_normal_MED = unc_C_normal_MU
-              
-        } else if (unc_C_normal_MU < -5.0) { 
-          
-                    unc_C_normal_MED = exp(unc_C_normal_MU);
-              
-        } else { 
-       
-              
-                    unc_C_normal_SD_sq <- unc_C_normal_SD * unc_C_normal_SD;
-                    approx_mean <- log1p_exp(unc_C_normal_MU + 0.5 * unc_C_normal_SD_sq);
-                    
-                    lognormal_adjustment <- log(0.5 * unc_C_normal_SD_sq)
-                    
-                    unc_C_normal_MED <- approx_mean / exp(lognormal_adjustment);
-                    
-                    # base_median <- softmax(unc_C_normal_MU);
-                    # 
-                    # correction <- 0
-                    # if (unc_C_normal_MU >= 0) {
-                    #   
-                    #      ## // For μ ≥ 0, correction is smaller:
-                    #      correction <- 0.2 * exp(-0.5 * unc_C_normal_MU) * unc_C_normal_SD^2;
-                    #   
-                    # } else { 
-                    #   
-                    #      ## // For μ < 0, correction increases
-                    #      correction <- 0.3 * exp(0.2 * abs(unc_C_normal_MU)) * unc_C_normal_SD^2;
-                    #   
-                    # }
-                    # 
-                    # ## // Apply correction (add because softplus underestimates median for moderate μ)
-                    # unc_C_normal_MED <- base_median - 0.5 * correction;
-            
-        }
-  
-        return_list <- list(lognormal_adjustment = lognormal_adjustment,
-                            approx_mean = approx_mean,
-                            unc_C_normal_MED = unc_C_normal_MED)
-        
-        return(return_list)
-  
-  
+# To examine multiple studies
+examine_multiple_studies <- function(x_cat_nd, x_cat_d, study_indices = 1:3) {
+  for (i in study_indices) {
+    print(paste("Examining Study", i))
+    print(compare_distributions(x_cat_nd, x_cat_d, i))
+  }
 }
 
-
-
-unc_C_normal_MU <- 1.5
-unc_C_normal_SD <- 2.5
-unc_C_normal <- rnorm(n = 100000, mean = unc_C_normal_MU, sd = unc_C_normal_SD)
-X <- unc_C_normal
-X_softmax <- softmax(unc_C_normal)
-
-mean(X_softmax)
-median(X_softmax)
-
-median_softmax_X_from_X_normal(unc_C_normal_MU = unc_C_normal_MU,
-                               unc_C_normal_SD = unc_C_normal_SD)
-
-mean(X_softmax)
-median(X_softmax)
-
-
-
-plot(density(X_softmax))
+# Example usage to examine first 3 studies
+# examine_multiple_studies(x_cat[[1]], x_cat[[2]], 1:3)
 
 
 
 
 
-Y <- exp(unc_C_normal) ## Y is log-normal
-mean(Y)
-median(Y)
-
-
-mean_Y <- exp(unc_C_normal_MU + 0.5 * unc_C_normal_SD^2 ) ; mean_Y
-median_Y <- exp(unc_C_normal_MU) ; median_Y
-
-plot(density(Y))
-
-plot(density(log(1 + exp(unc_C_normal))))
-
-Y <- 1 + exp(unc_C_normal)
-mean(Y)
-median(Y)
-Y_m_one <- Y - 1 ## this is log-normal
-mean(Y_m_one)
-median(Y_m_one)
-
-exp(unc_C_normal_MU) ; median(Y_m_one)
-exp(unc_C_normal_MU + 0.5*unc_C_normal_SD^2) ; mean(Y_m_one)
-
-
-1 + exp(unc_C_normal_MU) ; median(Y)
-1 + exp(unc_C_normal_MU + 0.5*unc_C_normal_SD^2) ; mean(Y)
-
-log(1 + exp(unc_C_normal_MU)) ; median(log(1 + exp(unc_C_normal)))
-
-log(1 + exp(unc_C_normal_MU + 0.5*unc_C_normal_SD^2)) ;   mean(log(1 + exp(unc_C_normal)))
-
-mean(unc_C_normal)
-median(unc_C_normal)
-
-
-
-mean_Ym1 <- exp(unc_C_normal_MU + 0.5 * unc_C_normal_SD^2 ) ; mean_Ym1
-median_Ym1 <- exp(unc_C_normal_MU) ; median_Ym1
-
-mean_Y <- 1 + mean_Ym1 ; mean_Y ; mean(Y)
-median_Y <- 1 + median_Ym1 ; median_Y ; median(Y)
-
-log1p_exp_X <- log1p_exp(X)
-median(log1p_exp_X)
-mean(log1p_exp_X)
-plot(density(log1p_exp_X))
-##
-plot(density(exp(X)), xlim = c(0, 10000))
-
-
-
-soft_C_normal_MED <- log1p_exp(unc_C_normal_MU) ; soft_C_normal_MED
-median(log1p_exp_X)
-mean(log1p_exp_X)
-median(X)
-
-
-
-log(median_Y)
-log(mean_Y)
-
-
-
-
-  correction <- -0.5 * unc_C_normal_SD^2;  correction  ##  // Approximate correction
-  
-log(exp(median(X_softmax)) - 1) - correction
-exp(log(exp(median(X_softmax)) - 1) - correction)
-  
-approx_MU <- log(exp(soft_C_normal_MED) - 1) + correction; approx_MU
 
 
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# Cerullo_polygon$Fp_lower
+# Cerullo_polygon$Fp_upper
 # 
-# Stan_mod_sample$summary(c("se"))  %>% print(n = 100)
+# Cerullo_polygon$Se_lower
+# Cerullo_polygon$Se_upper
+# 
+#   # geom_ribbon(data = df_all, mapping  = aes(ymin = Se_lower, ymax = Se_upper, fill = Model)) + 
+#   # geom_ribbon(data = df_all, mapping  = aes(xmin = Fp_lower, xmax = Fp_upper, fill = Model))
+#   # geom_ribbon(data = df_all, mapping  = aes(ymin = Se_pred_lower, ymax = Se_upper, fill = Model)) + 
+#   # geom_ribbon(data = df_all, mapping  = aes(ymin = Fp_pred_lower, ymax = Fp_pred_upper, fill = Model))
 # 
 # 
+#  geom_ribbon()
 # 
 # 
-# alpha_array <- array(dim = c(2, n_cat))
-# counter <- 1
-# for (k in 1:n_cat) { 
-# for (c in 1:2) {
-#     alpha_array[c, k] <- alpha$`50%`[counter]
-#     counter <- counter + 1
-#   }
+#   # geom_point(color = "red",   size = 4, data = df_all, mapping = aes(x = Fp_true, y = Se_true)) + 
+#   # geom_line(color = "red",    size = 1, data = df_all, mapping = aes(x = Fp_true, y = Se_true)) + 
+#   # theme_bw(base_size = 16)
+#   
+#   
+# 
+# 
+# mu <- 0.50
+# sigma <- 1.10
+# 
+# log_X <- rnorm(n = 100000, mean = mu, sd = sigma)
+# 
+# X <- exp(log_X)
+# 
+# plot(density(X), xlim  = c(0, 10))
+#      
+# 
+# mu_X <- exp(mu + 0.5*sigma^2) ; mu_X ; mean(X)
+# med_X <- exp(mu) ; med_X ; median(X)
+# sd_X <- sqrt((exp(sigma^2) - 1) * exp(2*mu + sigma^2)) ; sd_X ; sd(X)
+# 
+# quantile_X_lower <- exp(mu + sigma*qnorm(0.16)) ; quantile_X_lower
+# quantile_X_upper <- exp(mu + sigma*qnorm(1 - 0.16)) ; quantile_X_upper
+# 
+# exp(mu + sigma*qnorm(0.50))
+# 
+# sd_from_q_X <- (log(quantile_X_upper) - log(quantile_X_lower))/2
+# 
+# sd_from_q_X <- sqrt((quantile_X_upper-med_X)*(med_X-quantile_X_lower)) ; sd_from_q_X
+# 
+# 
+# sd_X_from_quantile <- 
+# 
+# plot(density(rnorm(n = 10000, mean = med_X, sd = sd_X)))
+# 
+# true_Se_OVERALL[4:7]
+# 
+# 
+# Stan_mod_sample$summary(c("prob_cumul_mu"))  %>% print(n = 100)
+# 
+# 
+# softmax <- function(x) { 
+#    return(log(1 + exp(x)))
 # }
-#  
+# softmax_inv <- function(x) { 
+#    return(log(- 1 + exp(x)))
+# }
 # 
-# p_ord_mu_nd <- alpha_array[1, ] / sum(alpha_array[1,])
-# p_ord_mu_d  <- alpha_array[2, ] / sum(alpha_array[2,])
-# 
-# 
-# 
-# 
-# est_Sp_OVERALL_mean
-# true_Sp_OVERALL
-# 
-# 100 - est_Se_OVERALL_mean
-# true_Se_OVERALL
-# 
-# 
-# 100 - est_Se_OVERALL_mean
-# true_Se_OVERALL
-# 
-# 
-# Stan_mod_sample$summary(c("lambda"))  %>% print(n = 100)
+# log1p_exp <- softmax
 # 
 # 
 # 
-
-
-
-
-# 10*c(alpha_raw$mean)
+# median_softmax_X_from_X_normal <- function( unc_C_normal_MU, 
+#                                             unc_C_normal_SD) {
+#   
+#         if (unc_C_normal_MU > 5.0) {
+#           
+#                     unc_C_normal_MED = unc_C_normal_MU
+#               
+#         } else if (unc_C_normal_MU < -5.0) { 
+#           
+#                     unc_C_normal_MED = exp(unc_C_normal_MU);
+#               
+#         } else { 
+#        
+#               
+#                     unc_C_normal_SD_sq <- unc_C_normal_SD * unc_C_normal_SD;
+#                     approx_mean <- log1p_exp(unc_C_normal_MU + 0.5 * unc_C_normal_SD_sq);
+#                     
+#                     lognormal_adjustment <- log(0.5 * unc_C_normal_SD_sq)
+#                     
+#                     unc_C_normal_MED <- approx_mean / exp(lognormal_adjustment);
+#                     
+#                     # base_median <- softmax(unc_C_normal_MU);
+#                     # 
+#                     # correction <- 0
+#                     # if (unc_C_normal_MU >= 0) {
+#                     #   
+#                     #      ## // For μ ≥ 0, correction is smaller:
+#                     #      correction <- 0.2 * exp(-0.5 * unc_C_normal_MU) * unc_C_normal_SD^2;
+#                     #   
+#                     # } else { 
+#                     #   
+#                     #      ## // For μ < 0, correction increases
+#                     #      correction <- 0.3 * exp(0.2 * abs(unc_C_normal_MU)) * unc_C_normal_SD^2;
+#                     #   
+#                     # }
+#                     # 
+#                     # ## // Apply correction (add because softplus underestimates median for moderate μ)
+#                     # unc_C_normal_MED <- base_median - 0.5 * correction;
+#             
+#         }
+#   
+#         return_list <- list(lognormal_adjustment = lognormal_adjustment,
+#                             approx_mean = approx_mean,
+#                             unc_C_normal_MED = unc_C_normal_MED)
+#         
+#         return(return_list)
+#   
+#   
+# }
 # 
-# mean(c(alpha_raw$mean))
-# 1/11
 # 
 # 
-# ## Summary estimates:
-# Stan_mod_sample$summary(c("Se"))  %>% print(n = 100)
-# Stan_mod_sample$summary(c("Sp"))  %>% print(n = 100)
+# unc_C_normal_MU <- 1.5
+# unc_C_normal_SD <- 2.5
+# unc_C_normal <- rnorm(n = 100000, mean = unc_C_normal_MU, sd = unc_C_normal_SD)
+# X <- unc_C_normal
+# X_softmax <- softmax(unc_C_normal)
+# 
+# mean(X_softmax)
+# median(X_softmax)
+# 
+# median_softmax_X_from_X_normal(unc_C_normal_MU = unc_C_normal_MU,
+#                                unc_C_normal_SD = unc_C_normal_SD)
+# 
+# mean(X_softmax)
+# median(X_softmax)
+# 
+# 
+# 
+# plot(density(X_softmax))
+# 
+# 
+# 
+# 
+# 
+# Y <- exp(unc_C_normal) ## Y is log-normal
+# mean(Y)
+# median(Y)
+# 
+# 
+# mean_Y <- exp(unc_C_normal_MU + 0.5 * unc_C_normal_SD^2 ) ; mean_Y
+# median_Y <- exp(unc_C_normal_MU) ; median_Y
+# 
+# plot(density(Y))
+# 
+# plot(density(log(1 + exp(unc_C_normal))))
+# 
+# Y <- 1 + exp(unc_C_normal)
+# mean(Y)
+# median(Y)
+# Y_m_one <- Y - 1 ## this is log-normal
+# mean(Y_m_one)
+# median(Y_m_one)
+# 
+# exp(unc_C_normal_MU) ; median(Y_m_one)
+# exp(unc_C_normal_MU + 0.5*unc_C_normal_SD^2) ; mean(Y_m_one)
+# 
+# 
+# 1 + exp(unc_C_normal_MU) ; median(Y)
+# 1 + exp(unc_C_normal_MU + 0.5*unc_C_normal_SD^2) ; mean(Y)
+# 
+# log(1 + exp(unc_C_normal_MU)) ; median(log(1 + exp(unc_C_normal)))
+# 
+# log(1 + exp(unc_C_normal_MU + 0.5*unc_C_normal_SD^2)) ;   mean(log(1 + exp(unc_C_normal)))
+# 
+# mean(unc_C_normal)
+# median(unc_C_normal)
+# 
+# 
+# 
+# mean_Ym1 <- exp(unc_C_normal_MU + 0.5 * unc_C_normal_SD^2 ) ; mean_Ym1
+# median_Ym1 <- exp(unc_C_normal_MU) ; median_Ym1
+# 
+# mean_Y <- 1 + mean_Ym1 ; mean_Y ; mean(Y)
+# median_Y <- 1 + median_Ym1 ; median_Y ; median(Y)
+# 
+# log1p_exp_X <- log1p_exp(X)
+# median(log1p_exp_X)
+# mean(log1p_exp_X)
+# plot(density(log1p_exp_X))
 # ##
-# Stan_mod_sample$summary(c("se"))  %>% print(n = 100)
-# Stan_mod_sample$summary(c("sp"))  %>% print(n = 100)
-# ##
-# Stan_mod_sample$summary(c("beta_mu"))  %>% print(n = 100)
-# Stan_mod_sample$summary(c("beta_SD"))  %>% print(n = 100)
+# plot(density(exp(X)), xlim = c(0, 10000))
+# 
+# 
+# 
+# soft_C_normal_MED <- log1p_exp(unc_C_normal_MU) ; soft_C_normal_MED
+# median(log1p_exp_X)
+# mean(log1p_exp_X)
+# median(X)
+# 
+# 
+# 
+# log(median_Y)
+# log(mean_Y)
+# 
+# 
+# 
+# 
+#   correction <- -0.5 * unc_C_normal_SD^2;  correction  ##  // Approximate correction
+#   
+# log(exp(median(X_softmax)) - 1) - correction
+# exp(log(exp(median(X_softmax)) - 1) - correction)
+#   
+# approx_MU <- log(exp(soft_C_normal_MED) - 1) + correction; approx_MU
+# 
+# 
+# 
+# 
+# 
+# # 
+# # Stan_mod_sample$summary(c("se"))  %>% print(n = 100)
+# # 
+# # 
+# # 
+# # 
+# # alpha_array <- array(dim = c(2, n_cat))
+# # counter <- 1
+# # for (k in 1:n_cat) { 
+# # for (c in 1:2) {
+# #     alpha_array[c, k] <- alpha$`50%`[counter]
+# #     counter <- counter + 1
+# #   }
+# # }
+# #  
+# # 
+# # p_ord_mu_nd <- alpha_array[1, ] / sum(alpha_array[1,])
+# # p_ord_mu_d  <- alpha_array[2, ] / sum(alpha_array[2,])
+# # 
+# # 
+# # 
+# # 
+# # est_Sp_OVERALL_mean
+# # true_Sp_OVERALL
+# # 
+# # 100 - est_Se_OVERALL_mean
+# # true_Se_OVERALL
+# # 
+# # 
+# # 100 - est_Se_OVERALL_mean
+# # true_Se_OVERALL
+# # 
+# # 
+# # Stan_mod_sample$summary(c("lambda"))  %>% print(n = 100)
+# # 
+# # 
+# # 
+# 
+# 
+# 
+# 
+# # 10*c(alpha_raw$mean)
+# # 
+# # mean(c(alpha_raw$mean))
+# # 1/11
+# # 
+# # 
+# # ## Summary estimates:
+# # Stan_mod_sample$summary(c("Se"))  %>% print(n = 100)
+# # Stan_mod_sample$summary(c("Sp"))  %>% print(n = 100)
 # # ##
-# Stan_mod_sample$summary(c("log_scale_mu"))  %>% print(n = 100)
-# Stan_mod_sample$summary(c("log_scale_SD"))  %>% print(n = 100)
-# Stan_mod_sample$summary(c("scale"))  %>% print(n = 100)
-# ##
-# Stan_mod_sample$summary(c("alpha"))  %>% print(n = 100)
-# ## Stan_mod_sample$summary(c("log_alpha"))  %>% print(n = 100)
-# ##
-# Stan_mod_sample$summary(c("phi"))  %>% print(n = 100)
-# Stan_mod_sample$summary(c("kappa"))  %>% print(n = 100)
-# ##
-# Stan_mod_sample$summary(c("C_nd"))  %>% print(n = 100)
-# Stan_mod_sample$summary(c("C_d"))  %>% print(n = 100)
-# ##
-# Stan_mod_sample$summary(c("C_mu"))  %>% print(n = 100)
-# Stan_mod_sample$summary(c("C_mu_empirical"))  %>% print(n = 100)
-# ##
-# Stan_mod_sample$summary(c("lambda"))  %>% print(n = 100)
-# ##
-# # Stan_mod_sample$summary(c("phi_d"))  %>% print(n = 100)
-# # Stan_mod_sample$summary(c("phi_nd"))  %>% print(n = 100)
-# 
-# # ## Study-specific estimates:
 # # Stan_mod_sample$summary(c("se"))  %>% print(n = 100)
 # # Stan_mod_sample$summary(c("sp"))  %>% print(n = 100)
+# # ##
+# # Stan_mod_sample$summary(c("beta_mu"))  %>% print(n = 100)
+# # Stan_mod_sample$summary(c("beta_SD"))  %>% print(n = 100)
+# # # ##
+# # Stan_mod_sample$summary(c("log_scale_mu"))  %>% print(n = 100)
+# # Stan_mod_sample$summary(c("log_scale_SD"))  %>% print(n = 100)
+# # Stan_mod_sample$summary(c("scale"))  %>% print(n = 100)
+# # ##
+# # Stan_mod_sample$summary(c("alpha"))  %>% print(n = 100)
+# # ## Stan_mod_sample$summary(c("log_alpha"))  %>% print(n = 100)
+# # ##
+# # Stan_mod_sample$summary(c("phi"))  %>% print(n = 100)
+# # Stan_mod_sample$summary(c("kappa"))  %>% print(n = 100)
+# # ##
+# # Stan_mod_sample$summary(c("C_nd"))  %>% print(n = 100)
+# # Stan_mod_sample$summary(c("C_d"))  %>% print(n = 100)
+# # ##
+# # Stan_mod_sample$summary(c("C_mu"))  %>% print(n = 100)
+# # Stan_mod_sample$summary(c("C_mu_empirical"))  %>% print(n = 100)
+# # ##
+# # Stan_mod_sample$summary(c("lambda"))  %>% print(n = 100)
+# # ##
+# # # Stan_mod_sample$summary(c("phi_d"))  %>% print(n = 100)
+# # # Stan_mod_sample$summary(c("phi_nd"))  %>% print(n = 100)
+# # 
+# # # ## Study-specific estimates:
+# # # Stan_mod_sample$summary(c("se"))  %>% print(n = 100)
+# # # Stan_mod_sample$summary(c("sp"))  %>% print(n = 100)
+# # 
+# # Stan_mod_sample$summary(c("cumul_prob"))  %>% print(n = 100)
+# # 
+# # 
+# # 
+# # 
+# # Stan_mod_sample$summary(c("alpha"))  %>% print(n = 100)
+# # Stan_mod_sample$summary(c("phi"))  %>% print(n = 100)
+# # Stan_mod_sample$summary(c("prob_ord_mu"))  %>% print(n = 100)
+# # ##
+# # df_alpha <- Stan_mod_sample$summary(c("alpha"))  %>% print(n = 100)
+# # alpha <- df_alpha$mean
+# # alpha_nd <- alpha_d <- c()
+# # ##
+# # counter <- 0 
+# # for (k in 1:n_thr) {
+# #   for (c in 1:2) {
+# #       counter <- counter + 1
+# #       if (c == 1) alpha_nd[k] <- alpha[counter]
+# #       if (c == 2) alpha_d[k] <- alpha[counter + 1]
+# #   }
+# # }
+# #   
+# #   
+# # prob_ord_mu_sim_nd   <- array(NA, dim = c(n_thr, 1000))
+# # prob_ord_mu_sim_d    <- array(NA, dim = c(n_thr, 1000))
+# # C_mu_sim_nd   <- array(NA, dim = c(n_thr, 1000))
+# # C_mu_sim_d    <- array(NA, dim = c(n_thr, 1000))
+# # anchor_nd <- 0.0
+# # anchor_d  <- 0.0
+# # 
+# # for (i in 1:1000) {
+# #   
+# #       prob_ord_mu_sim_nd[,i] <-  c(MCMCpack::rdirichlet(n = 1, alpha_nd))
+# #       prob_ord_mu_sim_d[,i]  <-  c(MCMCpack::rdirichlet(n = 1, alpha_d))
+# #       
+# #       C_mu_sim_nd[1, i] =   anchor_nd - qlogis( plogis(anchor_nd - (-Inf)) -  prob_ord_mu_sim_nd[1 ,i]  )
+# #       C_mu_sim_d[1, i]  =   anchor_d  - qlogis( plogis(anchor_d  - (-Inf)) -  prob_ord_mu_sim_d[1, i]  )
+# #       for (k in 2:n_thr) {
+# #         C_mu_sim_nd[k, i] =  anchor_nd - qlogis( plogis(anchor_nd - C_mu_sim_nd[k - 1, i]) - prob_ord_mu_sim_nd[k, i] );
+# #         C_mu_sim_d[k, i]  =  anchor_d  - qlogis( plogis(anchor_d  - C_mu_sim_d[k - 1, i])  - prob_ord_mu_sim_d[k, i] );
+# #       }
+# #       
+# #   
+# # }
+# # 
+# # C_mu_nd <- rowMeans(C_mu_sim_nd)
+# # C_mu_d  <- rowMeans(C_mu_sim_d)
+# # 
+# # 
+# # plogis( beta_mu_nd -  C_mu_nd[1:9] )
+# # 100.0 - true_Sp_OVERALL
+# # 
+# # plogis( beta_mu_d  -  C_mu_d[1:9] )
+# # true_Se_OVERALL
+# # 
+# # 
+# # ##
+# # C_mu <- Stan_mod_sample$summary(c("C_mu"))  %>% print(n = 100)
+# # C_mu_means <- C_mu$mean
+# # C_mu <- array(dim = c(2, n_thr))
+# # counter <- 0 
+# # for (k in 1:n_thr) {
+# #   for (c in 1:2) {
+# #      counter <- counter + 1
+# #      C_mu[c, k] <- C_mu_means[counter]
+# #   }
+# # }
+# # C_mu
+# # C_mu <- reorder_decreasing(C_mu)
+# # ##
+# # C_nd_inc <- Stan_mod_sample$summary(c("C_nd_inc"))  %>% print(n = 100)
+# # C_d_inc <- Stan_mod_sample$summary(c("C_d_inc"))  %>% print(n = 100)
+# # ##
+# # beta_mu <- Stan_mod_sample$summary(c("beta_mu"))  %>% print(n = 100)
+# # ##
+# # plogis( beta_mu_nd - C_nd_inc )
+# # 100.0 - true_Sp_OVERALL
+# # ##
+# #  plogis( - beta_mu_d + C_d_inc$mean)
+# # true_Se_OVERALL
+# # ##
+# # beta_mu <- Stan_mod_sample$summary(c("beta_mu"))  %>% print(n = 100)
+# # beta_mu_nd <- beta_mu$mean[1]
+# # beta_mu_d  <- beta_mu$mean[2]
+# # ##
+# # plogis( beta_mu_nd - C_mu[1, ] )
+# # 100.0 - true_Sp_OVERALL
+# # ##
+# # 1.0 - plogis( C_mu[2, ] - beta_mu_d)
+# # true_Se_OVERALL
+# # ##
+# # Stan_mod_sample$summary(c("cutpoints_nd"))  %>% print(n = 100)
+# # Stan_mod_sample$summary(c("cutpoints_d"))  %>% print(n = 100)
+# # 
+# # 
+# # 
+# # prob_cumul_mu_nd*100
+# # true_Sp_OVERALL
+# # 
+# # 
+# # prob_cumul_mu_d*100
+# # true_Se_OVERALL
+# # 
+# # 
+# # 
+# # Stan_mod_sample$summary(c("beta"))  %>% print(n = 100)
+# # 
+# # 
+# # 
+# #  
+# # 
+# # 
+# # 
+# # 
+# # 
+# # 
+# # 
+# # 
+# # 
+# # 
+# # 
+# # 
+# # 
+# # 
+# # 
+# # 
+# # 
 # 
-# Stan_mod_sample$summary(c("cumul_prob"))  %>% print(n = 100)
 # 
 # 
 # 
+# ## prior for softplus raw_scale:
+# samps <- rnorm(n = 10000, mu = 0.5, sd = 1.0)
+# soft_samps <- log(1 + exp(samps))
 # 
-# Stan_mod_sample$summary(c("alpha"))  %>% print(n = 100)
-# Stan_mod_sample$summary(c("phi"))  %>% print(n = 100)
-# Stan_mod_sample$summary(c("prob_ord_mu"))  %>% print(n = 100)
-# ##
-# df_alpha <- Stan_mod_sample$summary(c("alpha"))  %>% print(n = 100)
-# alpha <- df_alpha$mean
-# alpha_nd <- alpha_d <- c()
-# ##
-# counter <- 0 
-# for (k in 1:n_thr) {
-#   for (c in 1:2) {
-#       counter <- counter + 1
-#       if (c == 1) alpha_nd[k] <- alpha[counter]
-#       if (c == 2) alpha_d[k] <- alpha[counter + 1]
-#   }
-# }
+# round(quantile(soft_samps, probs = c(0.025, 0.50, 0.975)), 2)
 #   
-#   
-# prob_ord_mu_sim_nd   <- array(NA, dim = c(n_thr, 1000))
-# prob_ord_mu_sim_d    <- array(NA, dim = c(n_thr, 1000))
-# C_mu_sim_nd   <- array(NA, dim = c(n_thr, 1000))
-# C_mu_sim_d    <- array(NA, dim = c(n_thr, 1000))
-# anchor_nd <- 0.0
-# anchor_d  <- 0.0
-# 
-# for (i in 1:1000) {
-#   
-#       prob_ord_mu_sim_nd[,i] <-  c(MCMCpack::rdirichlet(n = 1, alpha_nd))
-#       prob_ord_mu_sim_d[,i]  <-  c(MCMCpack::rdirichlet(n = 1, alpha_d))
-#       
-#       C_mu_sim_nd[1, i] =   anchor_nd - qlogis( plogis(anchor_nd - (-Inf)) -  prob_ord_mu_sim_nd[1 ,i]  )
-#       C_mu_sim_d[1, i]  =   anchor_d  - qlogis( plogis(anchor_d  - (-Inf)) -  prob_ord_mu_sim_d[1, i]  )
-#       for (k in 2:n_thr) {
-#         C_mu_sim_nd[k, i] =  anchor_nd - qlogis( plogis(anchor_nd - C_mu_sim_nd[k - 1, i]) - prob_ord_mu_sim_nd[k, i] );
-#         C_mu_sim_d[k, i]  =  anchor_d  - qlogis( plogis(anchor_d  - C_mu_sim_d[k - 1, i])  - prob_ord_mu_sim_d[k, i] );
-#       }
-#       
-#   
-# }
-# 
-# C_mu_nd <- rowMeans(C_mu_sim_nd)
-# C_mu_d  <- rowMeans(C_mu_sim_d)
-# 
-# 
-# plogis( beta_mu_nd -  C_mu_nd[1:9] )
-# 100.0 - true_Sp_OVERALL
-# 
-# plogis( beta_mu_d  -  C_mu_d[1:9] )
-# true_Se_OVERALL
-# 
-# 
-# ##
-# C_mu <- Stan_mod_sample$summary(c("C_mu"))  %>% print(n = 100)
-# C_mu_means <- C_mu$mean
-# C_mu <- array(dim = c(2, n_thr))
-# counter <- 0 
-# for (k in 1:n_thr) {
-#   for (c in 1:2) {
-#      counter <- counter + 1
-#      C_mu[c, k] <- C_mu_means[counter]
-#   }
-# }
-# C_mu
-# C_mu <- reorder_decreasing(C_mu)
-# ##
-# C_nd_inc <- Stan_mod_sample$summary(c("C_nd_inc"))  %>% print(n = 100)
-# C_d_inc <- Stan_mod_sample$summary(c("C_d_inc"))  %>% print(n = 100)
-# ##
-# beta_mu <- Stan_mod_sample$summary(c("beta_mu"))  %>% print(n = 100)
-# ##
-# plogis( beta_mu_nd - C_nd_inc )
-# 100.0 - true_Sp_OVERALL
-# ##
-#  plogis( - beta_mu_d + C_d_inc$mean)
-# true_Se_OVERALL
-# ##
-# beta_mu <- Stan_mod_sample$summary(c("beta_mu"))  %>% print(n = 100)
-# beta_mu_nd <- beta_mu$mean[1]
-# beta_mu_d  <- beta_mu$mean[2]
-# ##
-# plogis( beta_mu_nd - C_mu[1, ] )
-# 100.0 - true_Sp_OVERALL
-# ##
-# 1.0 - plogis( C_mu[2, ] - beta_mu_d)
-# true_Se_OVERALL
-# ##
-# Stan_mod_sample$summary(c("cutpoints_nd"))  %>% print(n = 100)
-# Stan_mod_sample$summary(c("cutpoints_d"))  %>% print(n = 100)
-# 
-# 
-# 
-# prob_cumul_mu_nd*100
-# true_Sp_OVERALL
-# 
-# 
-# prob_cumul_mu_d*100
-# true_Se_OVERALL
-# 
-# 
-# 
-# Stan_mod_sample$summary(c("beta"))  %>% print(n = 100)
-# 
-# 
-# 
-#  
 # 
 # 
 # 
@@ -1334,30 +1430,3 @@ approx_MU <- log(exp(soft_C_normal_MED) - 1) + correction; approx_MU
 # 
 # 
 # 
-# 
-# 
-# 
-# 
-# 
-# 
-# 
-# 
-
-
-
-
-## prior for softplus raw_scale:
-samps <- rnorm(n = 10000, mu = 0.5, sd = 1.0)
-soft_samps <- log(1 + exp(samps))
-
-round(quantile(soft_samps, probs = c(0.025, 0.50, 0.975)), 2)
-  
-
-
-
-
-
-
-
-
-

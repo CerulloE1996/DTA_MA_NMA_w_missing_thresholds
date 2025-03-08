@@ -576,80 +576,408 @@ convert_cumulative_to_category <- function(cumulative_matrix,
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+categorical_to_individual <- function( categorical_matrix,
+                                       binary_disease_indicator,
+                                       missing_indicator = -1) {
+
+        # Initialize list to store results
+        results <- list()
+        n_studies <- nrow(categorical_matrix)
+        n_categories <- ncol(categorical_matrix)
+
+        for (study in 1:n_studies) {
+          # Get counts for current study
+          study_counts <- categorical_matrix[study, ]
+
+          # Initialize vectors for this study
+          study_id <- vector()
+          category_values <- vector()
+
+          # For each category
+          for (cat in 1:n_categories) {
+            count <- study_counts[cat]
+
+            if (count == missing_indicator) {
+              # For missing data, create one observation with missing_indicator
+              study_id <- c(study_id, study)
+              category_values <- c(category_values, missing_indicator)
+            } else if (count > 0) {
+              # For non-missing data, replicate the category value count times
+              study_id <- c(study_id, rep(study, count))
+              category_values <- c(category_values, rep(cat, count))
+            }
+          }
+
+          # Create data frame for this study
+          study_data <- data.frame(
+            study_id = study_id,
+            group = binary_disease_indicator,  # 1 for diseased, 0 for non-diseased
+            value = category_values
+          )
+
+          results[[study]] <- study_data
+        }
+
+        # Combine all studies into one data frame
+        final_data <- do.call(rbind, results)
+        rownames(final_data) <- NULL  # Reset row names
+
+        return(tibble(final_data))
+
+}
+
+
+
+
+
+
+
+
+
+# Create Box-Cox transformed fits for different lambda values
+# Function to create Box-Cox grid values
+box_cox_grid <- function(x, 
+                         lambda) {
+  
+  if (abs(lambda) < 0.001) {
+    return(log(x))
+  } else {
+    return((x^lambda - 1)/lambda)
+  }
+  
+}
+
+
+
+
+individual_obs_tibble <- x_individual
+group_name <- "non-diseased"
+study_index <- 1
+
 # 
 # 
+# # Check what study_id values exist
+# unique_studies <- unique(individual_obs_tibble$study_id)
+# print("Available study IDs:")
+# print(unique_studies)
 # 
-# 
-# 
-# 
-# 
-# 
-# 
-# 
-# 
-# 
-# 
-# 
-# 
-# 
-# 
-# 
-# 
-# 
-# categorical_to_individual <- function( categorical_matrix, 
-#                                        binary_disease_indicator,
-#                                        missing_indicator = -1) {
-#   
-#         # Initialize list to store results
-#         results <- list()
-#         n_studies <- nrow(categorical_matrix)
-#         n_categories <- ncol(categorical_matrix)
-#         
-#         for (study in 1:n_studies) {
-#           # Get counts for current study
-#           study_counts <- categorical_matrix[study, ]
-#           
-#           # Initialize vectors for this study
-#           study_id <- vector()
-#           category_values <- vector()
-#           
-#           # For each category
-#           for (cat in 1:n_categories) {
-#             count <- study_counts[cat]
-#             
-#             if (count == missing_indicator) {
-#               # For missing data, create one observation with missing_indicator
-#               study_id <- c(study_id, study)
-#               category_values <- c(category_values, missing_indicator)
-#             } else if (count > 0) {
-#               # For non-missing data, replicate the category value count times
-#               study_id <- c(study_id, rep(study, count))
-#               category_values <- c(category_values, rep(cat, count))
-#             }
-#           }
-#           
-#           # Create data frame for this study
-#           study_data <- data.frame(
-#             study_id = study_id,
-#             group = binary_disease_indicator,  # 1 for diseased, 0 for non-diseased
-#             value = category_values
-#           )
-#           
-#           results[[study]] <- study_data
-#         }
-#         
-#         # Combine all studies into one data frame
-#         final_data <- do.call(rbind, results)
-#         rownames(final_data) <- NULL  # Reset row names
-#         
-#         return(final_data)
-#   
-# }
-# 
-# 
-# 
-# 
-# 
+# # Check what group values exist
+# unique_groups <- unique(individual_obs_tibble$group)
+# print("Available group values:")
+# print(unique_groups)
+
+
+
+## Function for log-logistic density:
+dloglogistic <- function(x, 
+                         alpha, 
+                         beta) {
+  return((alpha/beta) * (x/beta)^(alpha-1) / (1 + (x/beta)^alpha)^2)
+}
+
+
+
+## Function for Box-Cox density
+box_cox_density <- function(x, 
+                            lambda,
+                            data) {
+  # Only process positive values (Box-Cox requires positive values)
+  if(any(x <= 0)) return(rep(0, length(x)))
+  
+  # Transform the data
+  transformed_data <- box_cox_transform(data, lambda)
+  
+  # Fit normal to transformed data
+  mean_transformed <- mean(transformed_data)
+  sd_transformed <- sd(transformed_data)
+  
+  # Calculate density with Jacobian adjustment
+  density_values <- dnorm(box_cox_transform(x, lambda), 
+                          mean = mean_transformed, 
+                          sd = sd_transformed) * x^(lambda-1)
+  
+  return(density_values)
+}
+
+
+
+
+{
+      
+      ## 
+      ## lambda <- -0.5:
+      ##
+      box_cox_neg05 <- function(x) {
+            return((x^(-0.5) - 1.0)/(-0.5))
+      }
+      bc_neg05_jacobian <- function(x) { 
+            return(x^(-1.5))
+      }
+      bc_neg05_density <- function(x) {
+        
+            unajusted_dens <- dnorm(box_cox_neg05(x), 
+                                    mean = mean(x), 
+                                    sd   = sd(x))
+            
+            return(unajusted_dens * bc_05_jacobian(x))
+        
+      }
+      ## 
+      ## lambda <- +0.5:
+      ##
+      box_cox_05 <- function(x) {
+            return((x^0.5 - 1.0)/0.5)
+      }
+      bc_05_jacobian <- function(x) { 
+            return(x^(-0.5))
+      }
+      bc_05_density <- function(x) {
+        
+        unajusted_dens <- dnorm(box_cox_05(x), 
+                                mean = mean(x), 
+                                sd   = sd(x))
+        
+        return(unajusted_dens * bc_05_jacobian(x))
+        
+      }
+      ## 
+      ## lambda > 0:
+      ##
+      box_cox_pos <- function(x, 
+                              lambda) {
+            return((x^lambda - 1.0)/lambda)
+      }
+      bc_pos_jacobian <- function(x,
+                                  lambda) { 
+            return(x^(1.0 - lambda))
+      }
+      bc_pos_density <- function(x,
+                                 lambda) {
+            
+            trans_x <- box_cox_pos(x = x, 
+                                   lambda = lambda)
+            
+            unajusted_dens <- dnorm(trans_x, 
+                                    mean = mean(x), 
+                                    sd   = sd(x))
+            
+            Jacobian <- bc_pos_jacobian(x = x,
+                                        lambda = lambda)
+            
+            return(unajusted_dens * Jacobian)
+        
+      }
+
+}
+
+
+
+
+box_cox_transform <- function(x, 
+                              lambda) {
+  
+      if(abs(lambda) < 0.001) return(log(x))
+      return((x^lambda - 1)/lambda)
+  
+}
+
+bc_density <- function(x, 
+                       lambda, 
+                       observations) {
+  
+      ## Transform original data:
+      transformed_data <- box_cox_transform(observations, 
+                                            lambda)
+      transformed_mean <- mean(transformed_data)
+      transformed_sd   <- sd(transformed_data)
+      
+      ## Apply Jacobian adjustment:
+      jacobian <- x^(lambda-1)
+      
+      ## Calculate density:
+      dnorm(box_cox_transform(x, lambda), 
+            mean = transformed_mean, 
+            sd = transformed_sd) * jacobian
+  
+}
+
+
+study_indexes <- c(1:n_studies)
+
+##
+## Function to fit distributions and create plots:
+##
+plot_distribution_fits <- function(individual_obs_tibble, 
+                                   n_studies,
+                                   study_indexes = NULL, 
+                                   group_name = "non-diseased") {
+  
+                  if (group_name == "non-diseased") { 
+                      group_value <- 0.0
+                  } else { 
+                      group_value <- 1.0
+                  }
+
+                  if (is.null(study_indexes)) { 
+                     study_indexes <- seq(from = 1, to = n_studies)
+                  }
+
+                  individual_obs_tibble
+                  df_filtered <- dplyr::filter(individual_obs_tibble, 
+                                               study_id %in% study_indexes, 
+                                               group == as.numeric(group_value)) %>% 
+                                 print(n = 100)
+                    
+                  ## Extract test values
+                  observations <- df_filtered$value
+                  
+                  ## Calculate bin width based on data range
+                  bin_width <- max(1, (max(observations) - min(observations)) / 30)
+                  
+                  ## Log-normal (need to handle zeros if present)
+                  obs_for_log <- observations
+                  if(any(obs_for_log <= 0)) obs_for_log <- observations + 1 # Shift if needed
+                  
+                  log_normal_fit <- try(MASS::fitdistr(obs_for_log, "lognormal"))
+                  if(!inherits(lognormal_fit, "try-error")) {
+                    lognormal_meanlog <- lognormal_fit$estimate["meanlog"]
+                    lognormal_sdlog <- lognormal_fit$estimate["sdlog"]
+                  } else {
+                    lognormal_meanlog <- mean(log(obs_for_log))
+                    lognormal_sdlog <- sd(log(obs_for_log))
+                  }
+                  
+                  ## Log-logistic (need to handle zeros if present)
+                  # Fit log-logistic parameters
+                  # For log-logistic, we'll estimate shape and scale parameters
+                  # using method of moments from log-transformed data
+                  log_data <- log(obs_for_log)
+                  mu_log   <- mean(log_data)
+                  sd_log   <- sd(log_data)
+                  
+                  ## Convert to log-logistic parameters (approximation)
+                  ## Shape parameter (alpha) related to the variability
+                  alpha <- pi/(sd_log * sqrt(3))
+                  ## Scale parameter (beta) related to the median
+                  beta <- exp(mu_log)
+                  # ##
+                  # ## Create box-cox densities:
+                  # ##
+                  # bc_neg1_density   <- bc_density(lambda = -1.0, x = observations)
+                  # bc_neg05_density  <- bc_density(lambda = -0.5, x = observations)
+                  # ## For lambda > 0:
+                  # bc_05_density  <- bc_density(lambda = 0.5, x = observations)
+                  # bc_1_density   <- bc_density(lambda = 1.0, x = observations)
+                  # bc_15_density  <- bc_density(lambda = 1.5, x = observations)
+                  # bc_2_density   <- bc_density(lambda = 2.0, x = observations)
+                  # # bc_25_density  <- bc_density(lambda = 2.5, x = observations)
+                  # bc_3_density   <- bc_density(lambda = 3.0, x = observations)
+                  ##
+                  ## Plot title:
+                  ##
+                  if (length(study_indexes == n_studies)) { 
+                        plot_title <- paste("Distribution of observed", group_name, "data for ALL", n_studies, "studies")
+                  } else { 
+                        plot_title <- paste("Distribution of observed", group_name, "data for all studies", study_index)
+                  }
+                  ##
+                  ## Create plot:
+                  ##
+                  plot <- ggplot(data.frame(value = observations), aes(x = value)) +
+                          ##
+                          ## Histogram of OBSERVED data:
+                          ##
+                          geom_histogram(aes(y = after_stat(density)), binwidth = bin_width, 
+                                         fill = "lightblue", color = "darkblue", alpha = 0.8) +
+                          ##
+                          ## Add density estimate:
+                          ##
+                          geom_density(color = "black", size = 2.0) +
+                          ##
+                          ## Add log-normal density (if data is positive):
+                          ##
+                          stat_function(fun = function(x) dlnorm(x,
+                                                                 meanlog = lognormal_meanlog, 
+                                                                 sdlog   = lognormal_sdlog),
+                                        color = "green", size = 1.0, linetype = "dashed") + 
+                          ##
+                          ## Add log-logistic density:
+                          ##
+                          stat_function(fun = function(x) dloglogistic(x, 
+                                                                       alpha, 
+                                                                       beta),
+                                        color = "blue", size = 1.0, linetype = "dashed") + 
+                          ##
+                          ## Add Box-Cox densities:
+                          ##
+                          stat_function(fun = function(x) bc_density(x, lambda = -1.0, observations = observations), color = "darkblue", size = 1.5) +
+                          stat_function(fun = function(x) bc_density(x, lambda = -0.5, observations = observations), color = "darkred",  size = 1.5) +
+                          ##
+                          stat_function(fun = function(x) bc_density(x, lambda = +0.5,  observations = observations), color = "orange", size = 1.5) +
+                          stat_function(fun = function(x) bc_density(x, lambda = +1.0,  observations = observations), color = "green",  size = 1.5) +
+                          stat_function(fun = function(x) bc_density(x, lambda = +1.5,  observations = observations), color = "purple", size = 1.5) +
+                          stat_function(fun = function(x) bc_density(x, lambda = +2.0,  observations = observations), color = "red",    size = 1.5) +
+                          ## 
+                          ## Formatting:
+                          ##
+                          labs(title = plot_title,
+                               subtitle = paste("n =", length(observations)),
+                               x = "Test Value", 
+                               y = "Density") +
+                          theme_minimal() +
+                          ##
+                          ## Add legends:
+                          ##
+                          annotate("text", x = max(observations)*0.8, y = max(density(observations)$y)*0.90, label = "Log-normal (dashed line)",   color = "green") +
+                          annotate("text", x = max(observations)*0.8, y = max(density(observations)$y)*0.85, label = "Log-logistic (dashed line)", color = "blue") + 
+                          ## Box-cox:
+                          annotate("text", x = max(observations)*0.8, y = max(density(observations)$y)*0.75, label = "Box-Cox (λ=-1.0)", color = "darkblue") +
+                          annotate("text", x = max(observations)*0.8, y = max(density(observations)$y)*0.70, label = "Box-Cox (λ=-0.5)", color = "darkred") + 
+                          ## Box-cox:
+                          annotate("text", x = max(observations)*0.8, y = max(density(observations)$y)*0.65, label = "Box-Cox (λ=+0.5)", color = "orange") + 
+                          annotate("text", x = max(observations)*0.8, y = max(density(observations)$y)*0.60, label = "Box-Cox (λ=+1.0)", color = "green") + 
+                          annotate("text", x = max(observations)*0.8, y = max(density(observations)$y)*0.55, label = "Box-Cox (λ=+1.5)", color = "purple") + 
+                          annotate("text", x = max(observations)*0.8, y = max(density(observations)$y)*0.50, label = "Box-Cox (λ=+2.0)", color = "red")
+                
+                    print(plot)
+                        
+                    return(plot)
+  
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
