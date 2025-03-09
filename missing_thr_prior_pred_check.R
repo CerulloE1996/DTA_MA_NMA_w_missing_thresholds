@@ -98,7 +98,7 @@ induced_Dirichlet_ppc_plot <- function(  method = "sigma",
                                       
                                       # Optimize to find alpha_0:
                                       opt_result <- optimize(error_function, 
-                                                             interval = c(exp(log_alpha_lb), 1000), 
+                                                             interval = c(0, 1000), 
                                                              tol = 1e-8,
                                                              current_phi = current_phi,
                                                              SDs = SDs)

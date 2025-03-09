@@ -44,6 +44,10 @@ options(scipen = 999999999999)
  
 
 
+prior_vis_test_index <- 3
+n_thr_t <- n_thr[prior_vis_test_index]
+n_cat_t <- n_thr_t + 1
+
 #### To overwrite some model options:
 {
     
@@ -68,10 +72,10 @@ options(scipen = 999999999999)
     
     if (method == "sigma") { 
       
-            prior_dirichlet_cat_SDs_mean <- rep(0.00, n_cat)
+            prior_dirichlet_cat_SDs_mean <- rep(0.00, n_cat_t)
             # prior_dirichlet_cat_SDs_SD   <- rep(0.50, n_cat) ## example of when "vague" prior is very NOT vague and bad !!!
-            prior_dirichlet_cat_SDs_SD   <- rep(0.10, n_cat) ## example of when "vague" prior is very NOT vague and bad !!!
-            prior_dirichlet_cat_means_alpha <- rep(1.00, n_cat)
+            prior_dirichlet_cat_SDs_SD   <- rep(0.10, n_cat_t) ## example of when "vague" prior is very NOT vague and bad !!!
+            prior_dirichlet_cat_means_alpha <- rep(1.00, n_cat_t)
             ##
             Stan_data_list$prior_dirichlet_cat_means_alpha <- prior_dirichlet_cat_means_alpha
             Stan_data_list$prior_dirichlet_cat_SDs_mean <- prior_dirichlet_cat_SDs_mean
@@ -83,7 +87,7 @@ options(scipen = 999999999999)
             ##
             inf_dir_samples <- induced_Dirichlet_ppc_plot(   method = method,
                                                              N = 5000,
-                                                             n_cat = n_cat,
+                                                             n_cat = n_cat_t,
                                                              other_args_list = other_args_list)
       
       
@@ -92,7 +96,7 @@ options(scipen = 999999999999)
       
             prior_kappa_mean <- 0
             prior_kappa_SD <-   200
-            prior_dirichlet_cat_means_alpha <- rep(1, n_cat)
+            prior_dirichlet_cat_means_alpha <- rep(1, n_cat_t)
             ##
             Stan_data_list$prior_kappa_mean <-  rep(prior_kappa_mean, 1)
             Stan_data_list$prior_kappa_SD <-    rep(prior_kappa_SD, 1)
@@ -112,7 +116,7 @@ options(scipen = 999999999999)
                                                              prior_mean = Stan_data_list$prior_kappa_mean,
                                                              prior_sd = Stan_data_list$prior_kappa_SD,
                                                              prior_dirichlet_phi =   prior_dirichlet_cat_means_alpha,
-                                                             n_cat = n_cat,
+                                                             n_cat = n_cat_t,
                                                              N = 5000)
     
     } else if (method == "alpha") {
@@ -121,7 +125,7 @@ options(scipen = 999999999999)
             # prior_alpha_mean <-  0
             # prior_alpha_SD   <-  10
             # ##
-            # prior_dirichlet_cat_means_alpha <- rep(1, n_cat) #'# dummy
+            # prior_dirichlet_cat_means_alpha <- rep(1, n_cat_t) #'# dummy
             # Stan_data_list$prior_kappa_mean <-  rep(prior_alpha_mean, 2)
             # Stan_data_list$prior_kappa_SD <-    rep(prior_alpha_SD, 2)
             # Stan_data_list$prior_dirichlet_cat_means_alpha <- list(prior_dirichlet_cat_means_alpha, prior_dirichlet_cat_means_alpha)
@@ -139,7 +143,7 @@ options(scipen = 999999999999)
             #                                                  log_alpha_ub = Stan_data_list$log_alpha_ub,
             #                                                  prior_mean = prior_alpha_mean,
             #                                                  prior_sd = prior_alpha_SD,
-            #                                                  n_cat = n_cat,
+            #                                                  n_cat = n_cat_t,
             #                                                  N = 5000)
     
     }
@@ -185,60 +189,108 @@ options(scipen = 999999999999)
 
 
 
+{
+      Stan_data_list$prior_dirichlet_cat_means_alpha <- list()
+      Stan_data_list$prior_dirichlet_cat_SDs_mean    <- list()
+      Stan_data_list$prior_dirichlet_cat_SDs_SD      <- list()
+      for (t in 1:n_index_tests) {
+          Stan_data_list$prior_dirichlet_cat_means_alpha[[t]] <- rep(1.0, n_thr_max + 1)
+          Stan_data_list$prior_dirichlet_cat_SDs_mean[[t]]    <- rep(0.0, n_thr_max + 1)
+          Stan_data_list$prior_dirichlet_cat_SDs_SD[[t]]      <- rep(0.10, n_thr_max + 1)
+      }
+      ##
+      ##
+      Stan_data_list$kappa_lb <- c()
+      for (t in 1:n_index_tests) {
+         Stan_data_list$kappa_lb[t] <- 0
+      }
+}
 
 
-
+n_total_raw_simplex_elements <- sum(Stan_data_list$n_thr)
 ##  | ------   Initial values  -------------------------------------------------------------------------
 {
-      n_sets_of_cutpoints <- 1
-  
-      Stan_init_list <- list()
-      ##
-      Stan_init_list$cutpoints_nd <- t(array(dim = c(n_thr, n_studies), data = seq(from = -2.0, to = 2.0, length = n_thr)))
-      Stan_init_list$cutpoints_d <-  t(array(dim = c(n_thr, n_studies), data = seq(from = -2.0, to = 2.0, length = n_thr)))
-      ##
-      ##
-      Stan_init_list$beta_mu <- rep(0.00001, 2)
-      Stan_init_list$beta_SD <- rep(0.01, 2)
-      Stan_init_list$beta_z <-  array(0.0, dim = c(2, n_studies))
-      ##
-      Stan_init_list$kappa <- rep(10, n_sets_of_cutpoints)
-      Stan_init_list$phi <-  array(dim = c(n_sets_of_cutpoints, n_cat), data = rep(1/n_cat, n_cat))
-      ##
-      Stan_init_list$log_scale_mu <- rep(0.00001, 2)
-      Stan_init_list$log_scale_SD <- rep(0.01, 2)
-      Stan_init_list$log_scale_z <-  array(0.00001, dim = c(2, n_studies))
-      ##
-      Stan_init_list$log_scale_d_mu <-  Stan_init_list$log_scale_mu[2]
-      Stan_init_list$log_scale_d_SD <-  Stan_init_list$log_scale_SD[2]
-      Stan_init_list$log_scale_d_z <-   Stan_init_list$log_scale_z[2, ]
-      # ##
-      Stan_init_list$log_alpha <- list(rep(log(1.01), n_cat))
-      # ##
-      Stan_init_list$alpha <- list(rep(1.01, n_cat))
-  
+        Stan_init_list <- list()
+        ##
+        Stan_init_list$beta_mu      <- rep(0.001, n_index_tests)
+        Stan_init_list$raw_scale_mu <- rep(0.001, n_index_tests)
+        ##
+        Stan_init_list$C_raw_vec <- rep(-2.0, n_total_cutpoints)
+        Stan_init_list$dirichlet_cat_means_phi_raw_vec <- rep(-2.0, n_total_raw_simplex_elements)
+        Stan_init_list$kappa <- rep(10, n_index_tests)
+        ##
+        ## For "NMA" (Nyaga-like) params:
+        ##
+        Stan_init_list$beta_eta_z      <- rep(0.001, n_studies)
+        Stan_init_list$beta_sigma      <- 0.001
+        Stan_init_list$raw_scale_eta_z <- rep(0.001, n_studies)
+        Stan_init_list$raw_scale_sigma <- 0.001
+        ##
+        Stan_init_list$beta_tau          <- rep(0.001, n_index_tests)
+        Stan_init_list$beta_delta_z      <- array(0.001, dim = c(n_studies, n_index_tests))
+        Stan_init_list$raw_scale_tau     <- rep(0.001, n_index_tests)
+        Stan_init_list$raw_scale_delta_z <- array(0.001, dim = c(n_studies, n_index_tests))
 }
 
 
 
-#### --------- Select model type:
- Model_type <- "Jones"
-##
-#### --------- Models w/ free + independent scale parameterss in D+ and D- groups:
-# Model_type <- "Cerullo_Xu_FIXED_cutpoints"
-# Model_type <- "Cerullo_Xu_RANDOM_cutpoints"
+
+# ##  | ------   Initial values  -------------------------------------------------------------------------
+# {
+#       n_sets_of_cutpoints <- 1
+#   
+#       Stan_init_list <- list()
+#       ##
+#       Stan_init_list$cutpoints_nd <- t(array(dim = c(n_thr, n_studies), data = seq(from = -2.0, to = 2.0, length = n_thr)))
+#       Stan_init_list$cutpoints_d <-  t(array(dim = c(n_thr, n_studies), data = seq(from = -2.0, to = 2.0, length = n_thr)))
+#       ##
+#       ##
+#       Stan_init_list$beta_mu <- rep(0.00001, 2)
+#       Stan_init_list$beta_SD <- rep(0.01, 2)
+#       Stan_init_list$beta_z <-  array(0.0, dim = c(2, n_studies))
+#       ##
+#       Stan_init_list$kappa <- rep(10, n_sets_of_cutpoints)
+#       Stan_init_list$phi <-  array(dim = c(n_sets_of_cutpoints, n_cat), data = rep(1/n_cat, n_cat))
+#       ##
+#       Stan_init_list$log_scale_mu <- rep(0.00001, 2)
+#       Stan_init_list$log_scale_SD <- rep(0.01, 2)
+#       Stan_init_list$log_scale_z <-  array(0.00001, dim = c(2, n_studies))
+#       ##
+#       Stan_init_list$log_scale_d_mu <-  Stan_init_list$log_scale_mu[2]
+#       Stan_init_list$log_scale_d_SD <-  Stan_init_list$log_scale_SD[2]
+#       Stan_init_list$log_scale_d_z <-   Stan_init_list$log_scale_z[2, ]
+#       # ##
+#       Stan_init_list$log_alpha <- list(rep(log(1.01), n_cat))
+#       # ##
+#       Stan_init_list$alpha <- list(rep(1.01, n_cat))
+# }
+
+
+
+# #### --------- Select model type:
+#  Model_type <- "Jones"
 # ##
-# Model_type <- "Cerullo_Gat_FIXED_cutpoints"
- Model_type <- "Cerullo_Gat_RANDOM_cutpoints"
+# #### --------- Models w/ free + independent scale parameterss in D+ and D- groups:
+# # Model_type <- "Cerullo_Xu_FIXED_cutpoints"
+# # Model_type <- "Cerullo_Xu_RANDOM_cutpoints"
+# # ##
+# # Model_type <- "Cerullo_Gat_FIXED_cutpoints"
+#  Model_type <- "Cerullo_Gat_RANDOM_cutpoints"
+# ##
+
+
+
+#### --------- Select NMA model type:
+# Model_type <- "Jones_Nyaga"
 ##
+# Model_type <- "Cerullo_Nyaga_Xu_FIXED_cutpoints"
+# Model_type <- "Cerullo_Nyaga_Xu_RANDOM_cutpoints"
+##
+# Model_type <- "Cerullo_Nyaga_Gat_FIXED_cutpoints"
+Model_type <- "Cerullo_Nyaga_Gat_RANDOM_cutpoints"
+ 
+ 
 
-
-
-
-# DTA_MA_Xu_RANDthr_log_alpha.stan
-# DTA_MA_Xu_RANDthr.stan
-# DTA_MA_Xu_RANDthr_SOFTP.stan
-# DTA_MA_Xu_RANDthr_LOGNORM.stan
 
 
 ##
@@ -255,157 +307,114 @@ cutpoint_param <- "sigma"
 ## - | ----------  Compile Stan model --------------------------------------------------------------------
 {   
   
-           if (Model_type == "Jones") {
+           if (Model_type == "Jones_Nyaga") {
              
-                             Stan_data_list$prior_raw_scale_mu_mean <- rep(0.50, 2)
-                             Stan_data_list$prior_raw_scale_mu_SD   <- rep(1.00, 2)
-                             Stan_data_list$prior_raw_scale_SD_mean <- rep(0.0, 2)
-                             Stan_data_list$prior_raw_scale_SD_SD   <- rep(0.50, 2)
-                             ##
-                             Stan_data_list$prior_boxcox_lambda_mean <- rep(0.0, 2)
-                             Stan_data_list$prior_boxcox_lambda_SD   <- rep(2.5, 2)
-                             ##
-                             Stan_data_list$prior_beta_mu_mean <- rep(0.0, 2)
-                             Stan_data_list$prior_beta_mu_SD   <- rep(2.5, 2)
-                             Stan_data_list$prior_beta_SD_mean <- rep(0.0, 2)
-                             Stan_data_list$prior_beta_SD_SD   <- rep(2.5, 2)
-                             ##
-                             Stan_init_list$beta_mu <- c(-1, +1)
-                             Stan_init_list$beta_SD <- rep(0.001, 2)
-                             Stan_init_list$beta_z <-  array(0.001, dim = c(2, n_studies))
-                             ##
-                             Stan_init_list$raw_scale_mu <- c(+1, + 1)
-                             Stan_init_list$raw_scale_SD <- rep(0.001, 2)
-                             Stan_init_list$raw_scale_z <-  array(0.001, dim = c(2, n_studies))
-                             ##
-                             Stan_init_list$lambda <- 1.0
+                             # Stan_data_list$prior_raw_scale_mu_mean <- rep(0.50, 2)
+                             # Stan_data_list$prior_raw_scale_mu_SD   <- rep(1.00, 2)
+                             # Stan_data_list$prior_raw_scale_SD_mean <- rep(0.0, 2)
+                             # Stan_data_list$prior_raw_scale_SD_SD   <- rep(0.50, 2)
+                             # ##
+                             # Stan_data_list$prior_boxcox_lambda_mean <- rep(0.0, 2)
+                             # Stan_data_list$prior_boxcox_lambda_SD   <- rep(2.5, 2)
+                             # ##
+                             # Stan_data_list$prior_beta_mu_mean <- rep(0.0, 2)
+                             # Stan_data_list$prior_beta_mu_SD   <- rep(2.5, 2)
+                             # Stan_data_list$prior_beta_SD_mean <- rep(0.0, 2)
+                             # Stan_data_list$prior_beta_SD_SD   <- rep(2.5, 2)
+                             # ##
+                             # Stan_init_list$beta_mu <- c(-1, +1)
+                             # Stan_init_list$beta_SD <- rep(0.001, 2)
+                             # Stan_init_list$beta_z <-  array(0.001, dim = c(2, n_studies))
+                             # ##
+                             # Stan_init_list$raw_scale_mu <- c(+1, + 1)
+                             # Stan_init_list$raw_scale_SD <- rep(0.001, 2)
+                             # Stan_init_list$raw_scale_z <-  array(0.001, dim = c(2, n_studies))
+                             # ##
+                             # Stan_init_list$lambda <- 1.0
                              ##
                              file <- file.path(getwd(), "stan_models", "DTA_MA_JONES_BOXCOX.stan")
                          
-           } else if (Model_type == "Cerullo_Xu_FIXED_cutpoints") {
-               
-                             Stan_init_list$C_nd <-  c(array(dim = c(n_thr, 1), data = seq(from = -2.0, to = 2.0, length = n_thr)))
-                             Stan_init_list$C_d  <-  c(array(dim = c(n_thr, 1), data = seq(from = -2.0, to = 2.0, length = n_thr)))
-                             ##
-                             file <- file.path(getwd(), "stan_models", "DTA_MA_Xu_FIXEDthr.stan")
-             
-           } else if (Model_type == "Cerullo_Xu_RANDOM_cutpoints") {
-             
-                             Stan_data_list$kappa_lb <- 0
-                             ##
-                             Stan_data_list$prior_beta_mu_mean <- 0.0
-                             Stan_data_list$prior_beta_mu_SD   <- 1.0
-                             Stan_data_list$prior_beta_SD_mean <- 0.0
-                             Stan_data_list$prior_beta_SD_SD   <- 0.50
-                             ##
-                             Stan_init_list$C_nd <-   t(array(dim = c(n_thr, n_studies), data = seq(from = -2.0, to = 2.0, length = n_thr)))
-                             Stan_init_list$C_d  <-   t(array(dim = c(n_thr, n_studies), data = seq(from = -2.0, to = 2.0, length = n_thr)))
-                             Stan_init_list$log_alpha <- (array(log(1.01), dim = c(1, n_cat)))
-                             Stan_init_list$alpha <- (array(1.01,  dim = c(1, n_cat)))
-                             # ###
-                             # Stan_init_list$log_increment_z <-  array(0.001, dim = c(n_studies, n_thr - 1))
-                             # Stan_init_list$log_increment_SD <- rep(0.001, n_thr - 1)
-                             # Stan_init_list$log_increment_MU <- rep(-2, n_thr - 1)
-                             # Stan_init_list$log_increment_MED <- rep(-2, n_thr - 1)
-                             # Stan_init_list$increment <-  exp(array(-2, dim = c(n_studies, n_thr - 1)))
-                             # Stan_init_list$inc <-      exp(array(0.10, dim = c(n_studies, n_thr - 1)))
-                             # Stan_init_list$raw_inc <-  exp(array(-1.0, dim = c(n_studies, n_thr - 1)))
-                             # Stan_init_list$first_C <- rep(-2, n_studies)
-                             # Stan_init_list$C_MU <-   seq(from = -2.0, to = 2.0, length = n_thr)
-                             # Stan_init_list$exp_inc_m1 <-      exp(array(0.10, dim = c(n_studies, n_thr - 1)))
-                             # Stan_init_list$exp_inc_m1_MU <- rep(0.1, n_thr - 1)
-                             # Stan_init_list$exp_inc_m1_SD <- rep(0.01, n_thr - 1)
-                             # Stan_init_list$raw <-      array(0.01, dim = c(n_studies, n_thr - 1))
-                             ## #
-                             Stan_init_list$dirichlet_cat_means_phi <- c(rep(1/(n_thr + 1), n_thr + 1))
-                             ##
-                             if (cutpoint_param == "kappa") { 
+           } else if (Model_type == "Cerullo_Nyaga_Xu_FIXED_cutpoints") {
+
+                             # Stan_init_list$C_nd <-  c(array(dim = c(n_thr, 1), data = seq(from = -2.0, to = 2.0, length = n_thr)))
+                             # Stan_init_list$C_d  <-  c(array(dim = c(n_thr, 1), data = seq(from = -2.0, to = 2.0, length = n_thr)))
                            
-                                        file <- file.path(getwd(), "stan_models", "DTA_MA_Xu_RANDthr_kappa.stan")
-                           
-                            } else if (cutpoint_param == "sigma") { 
-                           
-                                        file <- file.path(getwd(), "stan_models", "DTA_MA_Xu_RANDthr_SD.stan")
+                             file <- file.path(getwd(), "stan_models", "DTA_NMA_Nyaga_Xu_FIXEDthr.stan")
+
+           } else if (Model_type == "Cerullo_Nyaga_Xu_RANDOM_cutpoints") {
+
+                             # Stan_data_list$kappa_lb <- 0
+                             # ##
+                             # Stan_data_list$prior_beta_mu_mean <- 0.0
+                             # Stan_data_list$prior_beta_mu_SD   <- 1.0
+                             # Stan_data_list$prior_beta_SD_mean <- 0.0
+                             # Stan_data_list$prior_beta_SD_SD   <- 0.50
+                             # ##
+                             # Stan_init_list$C_nd <-   t(array(dim = c(n_thr, n_studies), data = seq(from = -2.0, to = 2.0, length = n_thr)))
+                             # Stan_init_list$C_d  <-   t(array(dim = c(n_thr, n_studies), data = seq(from = -2.0, to = 2.0, length = n_thr)))
+                             # Stan_init_list$log_alpha <- (array(log(1.01), dim = c(1, n_cat)))
+                             # Stan_init_list$alpha <- (array(1.01,  dim = c(1, n_cat)))
+                             # # ###
+                             # # Stan_init_list$log_increment_z <-  array(0.001, dim = c(n_studies, n_thr - 1))
+                             # # Stan_init_list$log_increment_SD <- rep(0.001, n_thr - 1)
+                             # # Stan_init_list$log_increment_MU <- rep(-2, n_thr - 1)
+                             # # Stan_init_list$log_increment_MED <- rep(-2, n_thr - 1)
+                             # # Stan_init_list$increment <-  exp(array(-2, dim = c(n_studies, n_thr - 1)))
+                             # # Stan_init_list$inc <-      exp(array(0.10, dim = c(n_studies, n_thr - 1)))
+                             # # Stan_init_list$raw_inc <-  exp(array(-1.0, dim = c(n_studies, n_thr - 1)))
+                             # # Stan_init_list$first_C <- rep(-2, n_studies)
+                             # # Stan_init_list$C_MU <-   seq(from = -2.0, to = 2.0, length = n_thr)
+                             # # Stan_init_list$exp_inc_m1 <-      exp(array(0.10, dim = c(n_studies, n_thr - 1)))
+                             # # Stan_init_list$exp_inc_m1_MU <- rep(0.1, n_thr - 1)
+                             # # Stan_init_list$exp_inc_m1_SD <- rep(0.01, n_thr - 1)
+                             # # Stan_init_list$raw <-      array(0.01, dim = c(n_studies, n_thr - 1))
+                             # ## #
+                             # Stan_init_list$dirichlet_cat_means_phi <- c(rep(1/(n_thr + 1), n_thr + 1))
+                             # ##
+                            if (cutpoint_param == "kappa") {
+
+                                        file <- file.path(getwd(), "stan_models", "DTA_NMA_Nyaga_Xu_RANDthr_kappa.stan")
+
+                            } else if (cutpoint_param == "sigma") {
+
+                                        file <- file.path(getwd(), "stan_models", "DTA_NMA_Nyaga_Xu_RANDthr.stan")
                             }
                            
-             } else if (Model_type == "Cerullo_Gat_FIXED_cutpoints") {
+             } else if (Model_type == "Cerullo_Nyaga_Gat_FIXED_cutpoints") {
                            
-                             Stan_init_list$C <-   seq(from = -2.0, to = 2.0, length = n_thr)
-                             Stan_init_list$raw_scale_mu <-  0.55
-                             Stan_init_list$raw_scale_SD <-  0.001
-                             Stan_init_list$raw_scale_z <- rep(0.001, n_studies)
-                             Stan_init_list$bs_L_Omega <- t(chol(diag(2)))
+                             # Stan_init_list$C <-   seq(from = -2.0, to = 2.0, length = n_thr)
+                             # Stan_init_list$raw_scale_mu <-  0.55
+                             # Stan_init_list$raw_scale_SD <-  0.001
+                             # Stan_init_list$raw_scale_z <- rep(0.001, n_studies)
+                             # Stan_init_list$bs_L_Omega <- t(chol(diag(2)))
+                             # ##
+                             # Stan_data_list$prior_beta_mu_mean <- 0.0
+                             # Stan_data_list$prior_beta_mu_SD   <- 1.0
+                             # Stan_data_list$prior_beta_SD_mean <- 0.0
+                             # Stan_data_list$prior_beta_SD_SD   <- 0.50
+                             # ##
+                             # Stan_data_list$prior_raw_scale_mu_mean <- 0.50
+                             # Stan_data_list$prior_raw_scale_mu_SD   <- 1.00
+                             # Stan_data_list$prior_raw_scale_SD_mean <- 0.0
+                             # Stan_data_list$prior_raw_scale_SD_SD   <- 0.50
                              ##
-                             Stan_data_list$prior_beta_mu_mean <- 0.0
-                             Stan_data_list$prior_beta_mu_SD   <- 1.0
-                             Stan_data_list$prior_beta_SD_mean <- 0.0
-                             Stan_data_list$prior_beta_SD_SD   <- 0.50
-                             ##
-                             Stan_data_list$prior_raw_scale_mu_mean <- 0.50
-                             Stan_data_list$prior_raw_scale_mu_SD   <- 1.00
-                             Stan_data_list$prior_raw_scale_SD_mean <- 0.0
-                             Stan_data_list$prior_raw_scale_SD_SD   <- 0.50
-                             ##
-                             file <- file.path(getwd(), "stan_models", "DTA_MA_Gat_FIXEDthr.stan")
+                             file <- file.path(getwd(), "stan_models", "DTA_NMA_Nyaga_Gat_FIXEDthr.stan")
                            
-             } else if (Model_type == "Cerullo_Gat_RANDOM_cutpoints") {
-               
-                             Stan_data_list$prior_raw_scale_mu_mean <- 0.50
-                             Stan_data_list$prior_raw_scale_mu_SD   <- 1.00
-                             Stan_data_list$prior_raw_scale_SD_mean <- 0.0
-                             Stan_data_list$prior_raw_scale_SD_SD   <- 0.50
-                             ##
-                             Stan_data_list$kappa_lb <- 0
-                             ##
-                             Stan_data_list$prior_beta_mu_mean <- 0.0
-                             Stan_data_list$prior_beta_mu_SD   <- 1.0
-                             Stan_data_list$prior_beta_SD_mean <- 0.0
-                             Stan_data_list$prior_beta_SD_SD   <- 0.50
-                             ##
-                             Stan_data_list$prior_raw_scale_mu_mean <- 0.50
-                             Stan_data_list$prior_raw_scale_mu_SD   <- 1.00
-                             Stan_data_list$prior_raw_scale_SD_mean <- 0.0
-                             Stan_data_list$prior_raw_scale_SD_SD   <- 0.50
-                             ##
-                             Stan_init_list$C_nd <-   t(array(dim = c(n_thr, n_studies), data = seq(from = -2.0, to = 2.0, length = n_thr)))
-                             ##
-                             Stan_init_list$beta_mu <- 0.001
-                             Stan_init_list$beta_SD <- 0.001
-                             Stan_init_list$beta_z <- rep(0.001, n_studies)
-                             ##
-                             Stan_init_list$raw_scale_mu <- 0.55
-                             Stan_init_list$raw_scale_SD <- 0.001
-                             Stan_init_list$raw_scale_z <-  rep(0.001, n_studies)
-                             ##
-                             Stan_data_list$prior_dirichlet_cat_SDs_mean <- rep(0.0 , n_cat)
-                             Stan_data_list$prior_dirichlet_cat_SDs_SD   <- rep(0.10, n_cat)
-                             ##
-                             Stan_init_list$dirichlet_cat_means_phi <- rep(1/n_cat, n_cat)
-                             ##
-                             file <- file.path(getwd(), "stan_models", "DTA_MA_Gat_RANDthr_SD.stan")
+             } else if (Model_type == "Cerullo_Nyaga_Gat_RANDOM_cutpoints") {
+
+                             file <- file.path(getwd(), "stan_models", "DTA_NMA_Nyaga_Gat_RANDthr.stan")
                            
              }
-  
-           # cmdstan_cpp_flags <- list(paste("CXXFLAGS += -O3  -march=native  -mtune=native",
-           #                           "-DSTAN_THREADS -pthread  -fPIC  -D_REENTRANT",
-           #                           "-mfma",
-           #                           "-mavx -mavx2",
-           #                           "-mavx512f -mavx512vl -mavx512dq",
-           #                           "-fno-math-errno    -fno-signed-zeros  -fno-trapping-math"))
            
-           outs <- R_fn_compile_Stan_model(Stan_model_file_path = file, 
+             ##
+             ## Compile Stan model:
+             ##
+             outs <- R_fn_compile_Stan_model(Stan_model_file_path = file, 
                                            CCACHE_PATH = "/usr/bin/ccache")
-           
-           #### outs$cmdstan_cpp_flags
-           
-           mod <- outs$mod
-           
-           # mod <- cmdstan_model(file, 
-           #                    ## force_recompile = TRUE,
-           #                    quiet = FALSE,
-           #                    ## user_header = path_to_cpp_user_header,
-           #                     cpp_options = cmdstan_cpp_flags
-           # )
+             ##
+             ## Extract Stan model object:
+             ##
+             mod <- outs$mod
 
 }
 
@@ -413,11 +422,85 @@ cutpoint_param <- "sigma"
 
 
 
+str(Stan_data_list)
+
+str(Stan_data_list$x_with_missings)
+Stan_data_list$x_with_missings
+
+Stan_data_list$n_index_tests
 
 
 
+# out_vec <- c()
+# counter <- 0
+# for (c in 1:2) {
+#     for (t in 1:n_index_tests) {
+#         for (s in 1:n_studies) {
+#             for (k in 1:n_thr_max) {
+#                 counter <- counter + 1
+#                 out_vec[counter] <- print(is.numeric(Stan_data_list$x_with_missings[[c]][[t]][s, k]))
+#             }
+#         }
+#     }
+# }
+# 
+# sum(out_vec == FALSE)
+
+Stan_data_list$n_tests
+Stan_data_list$n_thr
+
+indicator_test_in_study
+
+Stan_data_list$indicator_test_in_study <- indicator_index_test_in_study
 
 
+
+Stan_data_list$n_index_tests
+
+Stan_data_list$n_total_summary_cat
+
+n_total_summary_cat
+
+
+
+Stan_data_list$n_thr
+Stan_data_list$n_thr_max
+Stan_data_list$n_cat <- Stan_data_list$n_thr + 1 ; Stan_data_list$n_cat 
+Stan_data_list$n_cat_max <- Stan_data_list$n_thr_max + 1 ; Stan_data_list$n_cat_max
+
+
+
+str(Stan_data_list$x)
+
+##
+## x:
+##
+c <- 1
+##
+t <- 1
+Stan_data_list$x[t,c,,]
+t <- 2
+Stan_data_list$x[t,c,,]
+t <- 3
+Stan_data_list$x[t,c,,]
+t <- 4
+Stan_data_list$x[t,c,,]
+##
+## n:
+##
+c <- 1
+##
+t <- 1
+Stan_data_list$n[t,c,,]
+t <- 2
+Stan_data_list$n[t,c,,]
+t <- 3
+Stan_data_list$n[t,c,,]
+t <- 4
+Stan_data_list$n[t,c,,]
+
+
+Stan_data_list$n_obs_cutpoints
 
 
 

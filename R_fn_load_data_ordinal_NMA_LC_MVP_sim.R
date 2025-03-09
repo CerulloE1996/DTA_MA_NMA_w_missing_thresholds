@@ -513,6 +513,72 @@ simulate_binary_and_ordinal_MA_LC_MVP_data <- function(   n_studies = 25,
  
 
 
+# Function to create "indicator_test_in_study" indicator matrix
+create_test_in_study_for_NMA <- function(   n_studies, 
+                                            n_tests, 
+                                            prob_present = 0.75, 
+                                            min_index_tests_per_study = 1
+) {
+   
+           ## At least 1 index tests per study -> at least 2 total tests per study:
+           min_tests_per_study <- min_index_tests_per_study + 1
+           
+           ## Initialize the matrix:
+           indicator_index_test_in_study <- matrix(0, nrow = n_studies, ncol = n_tests)
+           
+           ## Ref test is ALWAYS included: 
+           reference_test_prob <- 1.0
+           
+           ## For each study, decide which tests are present:
+           for (s in 1:n_studies) {
+             
+                 ## Give reference test higher probability of being included
+                 present_probs <- rep(prob_present, n_tests)
+                 ## Assuming test 1 is ref test:
+                 present_probs[1] <- reference_test_prob  
+                 
+                 ## Randomly determine which tests are present (1 = present, 0 = absent)
+                 test_presence <- rbinom(n_tests, 1, present_probs)
+                 
+                 ## Ensure at least min_tests_per_study tests are present
+                 while (sum(test_presence) < min_tests_per_study) {
+                   ## If not enough tests, add one more randomly
+                   missing_tests <- which(test_presence == 0)
+                   if (length(missing_tests) > 0) {
+                     add_test <- sample(missing_tests, 1)
+                     test_presence[add_test] <- 1
+                   } else {
+                     break  # All tests already included
+                   }
+                 }
+                 
+                 indicator_index_test_in_study[s, ] <- test_presence
+             
+           }
+           
+           ## Optional: Ensure each test appears in at least one study:
+           for (t in 1:n_tests) {
+               
+               if (sum(indicator_index_test_in_study[, t]) == 0) {
+                 # If a test doesn't appear in any study, add it to a random study
+                 random_study <- sample(1:n_studies, 1)
+                 indicator_index_test_in_study[random_study, t] <- 1
+               }
+               
+           }
+           
+           indicator_index_test_in_study <- indicator_index_test_in_study[1:n_studies, 2:n_tests]
+           
+           ## Count number of (observed / non-missing): 
+           n_index_tests_per_study <- rowSums(indicator_index_test_in_study)
+           
+           return(list( indicator_index_test_in_study = indicator_index_test_in_study,
+                        n_index_tests_per_study = n_index_tests_per_study))
+   
+}
+ 
+ 
+ 
 
  
  
