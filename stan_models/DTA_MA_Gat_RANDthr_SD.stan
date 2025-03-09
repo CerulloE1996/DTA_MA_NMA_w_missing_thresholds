@@ -1,27 +1,4 @@
 
-//// NOTE: This verion is more suitable for "real world" use than the other "FIXED_thr" (fixed thresholds)
-//// version because it allows the Sp's to vary between studies eventhough the thresholds are still fixed 
-//// between studies. 
-//// This is because we have introduced mean parameters for the within-study ordinal-probit models in
-//// BOTH groups (i.e. not only in the diseased group) - we can do this without identifiability issues 
-//// - especially in our case where the within-study models are:
-//// (i) univariate, and:
-//// (ii) NOT latent class (i.e. assuming a perfect gold standard) 
-//// - this makes identification of parameters (in general) much easier. 
-////
-//// Also, please see the Michael Betancourt case study to understand why - particulaly in the Bayesian case 
-//// and especially when we use an Induced Dirichlet model (or prior model) - that identifiability is not as
-//// much of an issue and that we can freely estimate means AND cutpoint parameters in BOTH groups, link is here: 
-//// https://betanalpha.github.io/assets/case_studies/ordinal_regression.html
-//// Specifically, in this case study he he demonstrates that whilst there is indeed a theoretical 
-//// location/mean "non-identifiability"" (since shifting means and cutpoints by a constant preserves the 
-//// ordinal probabilities), in practice having an informative prior on one set of parameters
-//// (e.g. the mean) sufficiently anchors the model - especially one based on the Induced Dirichlet prior model
-//// (which allows us to set priors * directly * on the induced ordinal probabilities). 
-////
-//// Note that this cannot be said about frequentist versions of our model nor can it be said about models
-//// which naively use so-called "vague" priors. 
-
 
 
 functions {
@@ -161,8 +138,6 @@ parameters {
         real<lower=0.0> raw_scale_SD;   
         vector[n_studies] raw_scale_z;
         ////
-        cholesky_factor_corr[2] bs_L_Omega;
-        ////
         array[n_studies] ordered[n_thr] C_nd; // study-specific cutpoints
         simplex[n_cat] dirichlet_cat_means_phi;
         real<lower=kappa_lb> kappa;  
@@ -173,24 +148,7 @@ parameters {
 transformed parameters { 
   
         matrix[2, n_studies] locations;
-        ////
         matrix[2, n_studies] scales;
-        ////
-        cholesky_factor_cov[2] bs_L_Sigma;
-        ////
-        vector[2] bs_SD_vec;
-        bs_SD_vec[1] = beta_SD;
-        bs_SD_vec[2] = raw_scale_SD;
-        ////
-        vector[2] bs_mu_vec;
-        bs_mu_vec[1] = beta_mu;
-        bs_mu_vec[2] = raw_scale_mu;
-        ////
-        matrix[2, n_studies] bs_z_mat;
-        bs_z_mat[1, ] = to_row_vector(beta_z);
-        bs_z_mat[2, ] = to_row_vector(raw_scale_z);
-        ////
-        bs_L_Sigma = diag_pre_multiply(bs_SD_vec, bs_L_Omega);
         ////
         array[2] matrix[n_studies, n_thr] logit_cumul_prob; // Ordinal probs for the likelihood
         array[2] matrix[n_studies, n_thr] cumul_prob;  // Ordinal probs for the likelihood
@@ -251,21 +209,34 @@ transformed parameters {
            Ind_Dir_anchor     = rep_matrix(anchor, n_studies, n_thr);
         }
         ////
-        //// Between-study model for the location parameters ("beta") - models between-study correlation:
+        //// Between-study model for location and scale:
         ////
         {
-            matrix[2, n_studies] bs_mat;
-            for (s in 1:n_studies) {
-                 bs_mat[, s] = bs_mu_vec + bs_L_Sigma * bs_z_mat[, s];
-            }
             ////
             for (s in 1:n_studies) {
-                locations[1, s] = -0.5*bs_mat[1, s];
-                locations[2, s] = +0.5*bs_mat[1, s];
-                scales[1, s] = log1p_exp(-0.5*bs_mat[2, s]);
-                scales[2, s] = log1p_exp(+0.5*bs_mat[2, s]);
+                locations[1, s] = -0.5*(beta_mu      + beta_SD      * beta_z[s]); // = -0.5*(beta_mu + beta_SD * beta_z[s])
+                locations[2, s] = +0.5*(beta_mu      + beta_SD      * beta_z[s]);
+                scales[1, s] = log1p_exp(-0.5*(raw_scale_mu + raw_scale_SD * raw_scale_z[s]));
+                scales[2, s] = log1p_exp(+0.5*(raw_scale_mu + raw_scale_SD * raw_scale_z[s]));
             }
         }
+        // ////
+        // //// Between-study model for the location parameters ("beta") - models between-study correlation:
+        // ////
+        // {
+        //     matrix[2, n_studies] bs_mat;
+        //     for (s in 1:n_studies) {
+        //          bs_mat[1, s] = beta_mu      + beta_SD      * beta_z[s];       // beta_{s}     ~ normal(beta_mu,      beta_SD)
+        //          bs_mat[2, s] = raw_scale_mu + raw_scale_SD * raw_scale_z[s];  // raw_scale{s} ~ normal(raw_scale_mu, raw_scale_SD)
+        //     }
+        //     ////
+        //     for (s in 1:n_studies) {
+        //         locations[1, s] = -0.5*bs_mat[1, s];
+        //         locations[2, s] = +0.5*bs_mat[1, s];
+        //         scales[1, s] = log1p_exp(-0.5*bs_mat[2, s]);
+        //         scales[2, s] = log1p_exp(+0.5*bs_mat[2, s]);
+        //     }
+        // }
         ////
         //// Cutpoints:
         ////
@@ -342,7 +313,9 @@ transformed parameters {
 
 model {
       
+        ////
         //// Priors:
+        ////
         {
             //// locations:
             beta_mu ~ normal(prior_beta_mu_mean, prior_beta_mu_SD);
@@ -350,16 +323,16 @@ model {
             //// scales:
             raw_scale_mu ~ normal(prior_raw_scale_mu_mean, prior_raw_scale_mu_SD);
             raw_scale_SD ~ normal(prior_raw_scale_SD_mean, prior_raw_scale_SD_SD);
-            //// Between-study heterogenity:
-            bs_L_Omega ~ lkj_corr_cholesky(2.0);
         }
+        ////
         //// Induced-dirichlet between study ** model ** (NOT a prior model here but part of the actual likelihood since random-effect cutpoints!):
+        ////
         {
             //// target += normal_lpdf(kappa | prior_kappa_mean, prior_kappa_SD);
             target += dirichlet_lpdf( dirichlet_cat_means_phi | prior_dirichlet_cat_means_alpha ); // "flat" prior on the simplex dirichlet_cat_means_phi. 
             target += normal_lpdf(dirichlet_cat_SDs_sigma | prior_dirichlet_cat_SDs_mean, prior_dirichlet_cat_SDs_SD );
         }
-     
+        ////
         {
             for (s in 1:n_studies) {
                 vector[n_thr] rho =  normal_pdf(to_vector(Ind_Dir_cumul_prob[s, 1:n_thr]), 0.0, 1.0);   //  p_cumul[k - 1] * (1.0 - p_cumul[k - 1]); // original
@@ -375,11 +348,14 @@ model {
         }
         ////
         //// Likelihood / Model:
+        ////
         {
             to_vector(beta_z) ~ std_normal();   // (part of between-study model, NOT prior)
             to_vector(raw_scale_z) ~ std_normal();  // (part of between-study model, NOT prior)
         }
+        ////
         //// Increment the log-likelihood:
+        ////
         if (prior_only == 0) {
             for (c in 1:2) {
               target +=  sum(log_lik[c]);
@@ -416,15 +392,9 @@ generated quantities {
           vector[n_thr] C_MU_empirical; 
           vector[n_thr] prob_cumul_mu;  
           vector[n_cat] prob_ord_mu;  
-          corr_matrix[2] bs_Omega;
-          int n_sims = 1000;
           real<lower=kappa_lb> precision = kappa; 
           real dispersion = 1.0 / precision;
           vector[n_thr] expected_p_cumul;
-          ////
-          //// Compute between-study correlation matrix for location parameters:
-          ////
-          bs_Omega  =  multiply_lower_tri_self_transpose(bs_L_Omega);
   
           //// Initialise containers:
           for (c in 1:2) {
@@ -519,30 +489,21 @@ generated quantities {
           ////
           //// Calculate summary accuracy (using mean parameters):
           ////
-          real location_MU_nd = -0.5*beta_mu;
-          real location_MU_d  = +0.5*beta_mu;
-          real scale_MU_nd = log1p_exp(-0.5*raw_scale_mu);
-          real scale_MU_d  = log1p_exp(+0.5*raw_scale_mu);
           for (k in 1:n_thr) {
-                Fp[k] =   1.0 - Phi((C_MU[k] - location_MU_nd)/scale_MU_nd);
+                Fp[k] =   1.0 - Phi((C_MU[k] - (-0.5)*beta_mu)/log1p_exp((-0.5)*raw_scale_mu));
                 Sp[k] =   1.0 - Fp[k];
-                Se[k] =   1.0 - Phi((C_MU[k] - location_MU_d)/scale_MU_d);
+                Se[k] =   1.0 - Phi((C_MU[k] - (+0.5)*beta_mu)/log1p_exp((+0.5)*raw_scale_mu));
           }
           ////
           //// Calculate predictive accuracy:
           ////
           {
-                vector[2] bs_pred =  to_vector(multi_normal_cholesky_rng(bs_mu_vec, bs_L_Sigma));
-                ////
-                real location_MU_nd_pred = -0.5*bs_pred[1];
-                real scale_MU_nd_pred = log1p_exp(-0.5*bs_pred[2]);
-                ////
-                real location_MU_d_pred  = +0.5*bs_pred[1];
-                real scale_MU_d_pred  = log1p_exp(+0.5*bs_pred[2]);
+                real beta_pred      = normal_rng(beta_mu,       beta_SD);
+                real raw_scale_pred = normal_rng(raw_scale_mu, raw_scale_SD);
                 for (k in 1:n_thr) {
-                      Fp_pred[k] =   1.0 - Phi((C_mu_pred[k] - location_MU_nd_pred)/scale_MU_nd_pred);
+                      Fp_pred[k] =   1.0 - Phi((C_mu_pred[k] - (-0.5)*beta_pred)/log1p_exp((-0.5)*raw_scale_pred));
                       Sp_pred[k] =   1.0 - Fp_pred[k];
-                      Se_pred[k] =   1.0 - Phi((C_mu_pred[k] - location_MU_d_pred)/scale_MU_d_pred);
+                      Se_pred[k] =   1.0 - Phi((C_mu_pred[k] - (+0.5)*beta_pred)/log1p_exp((+0.5)*raw_scale_pred));
                 }
           }
           ////

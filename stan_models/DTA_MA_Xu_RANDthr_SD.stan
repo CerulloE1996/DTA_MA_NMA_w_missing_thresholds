@@ -1,28 +1,4 @@
 
-//// NOTE: This verion is more suitable for "real world" use than the other "FIXED_thr" (fixed thresholds)
-//// version because it allows the Sp's to vary between studies eventhough the thresholds are still fixed 
-//// between studies. 
-//// This is because we have introduced mean parameters for the within-study ordinal-probit models in
-//// BOTH groups (i.e. not only in the diseased group) - we can do this without identifiability issues 
-//// - especially in our case where the within-study models are:
-//// (i) univariate, and:
-//// (ii) NOT latent class (i.e. assuming a perfect gold standard) 
-//// - this makes identification of parameters (in general) much easier. 
-////
-//// Also, please see the Michael Betancourt case study to understand why - particulaly in the Bayesian case 
-//// and especially when we use an Induced Dirichlet model (or prior model) - that identifiability is not as
-//// much of an issue and that we can freely estimate means AND cutpoint parameters in BOTH groups, link is here: 
-//// https://betanalpha.github.io/assets/case_studies/ordinal_regression.html
-//// Specifically, in this case study he he demonstrates that whilst there is indeed a theoretical 
-//// location/mean "non-identifiability"" (since shifting means and cutpoints by a constant preserves the 
-//// ordinal probabilities), in practice having an informative prior on one set of parameters
-//// (e.g. the mean) sufficiently anchors the model - especially one based on the Induced Dirichlet prior model
-//// (which allows us to set priors * directly * on the induced ordinal probabilities). 
-////
-//// Note that this cannot be said about frequentist versions of our model nor can it be said about models
-//// which naively use so-called "vague" priors. 
-
-
 
 functions {
   
