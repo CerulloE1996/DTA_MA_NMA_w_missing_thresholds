@@ -66,7 +66,7 @@ functions {
                     int right_element = to_int(n/2.0 + 1.0);
                     return (sorted_x[left_element] + sorted_x[right_element]) / 2.0;
                 } else {            // For odd number of elements, return the middle one
-                    int middle_element = to_int((n+1.0)/2.0);
+                    int middle_element = to_int((n + 1.0)/2.0);
                     return sorted_x[middle_element];
                 }
        }

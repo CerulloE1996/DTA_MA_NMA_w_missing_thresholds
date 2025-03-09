@@ -91,7 +91,7 @@ functions {
 data {
       
           int<lower=1> n_studies;
-          int<lower=1> n_tests;
+          int<lower=1> n_tests; //// the number of INDEX tests. 
           ////
           array[n_tests] int<lower=1> n_thr;
           int<lower=1> n_thr_max; // corresponding to the test with the most thresholds/cutpoints. 
@@ -102,10 +102,10 @@ data {
           ////
           //// Data:
           ////
-          array[n_tests, 2] matrix[n_studies, n_thr_max] x_with_missings;
-          array[n_tests, 2] matrix[n_studies, n_thr_max] n;
-          array[n_tests, 2] matrix[n_studies, n_thr_max] x;
-          array[n_tests, 2] matrix[n_studies, n_thr_max] cutpoint_index;
+          array[2, n_tests] matrix[n_studies, n_thr_max] x_with_missings;
+          array[2, n_tests] matrix[n_studies, n_thr_max] x;
+          array[2, n_tests] matrix[n_studies, n_thr_max] n;
+          array[2, n_tests] matrix[n_studies, n_thr_max] cutpoint_index;
           ////
           // matrix[n_studies, n_tests] obs_indicator; // BINARY indicator for whether test t is observed in study s
           ////
@@ -136,28 +136,30 @@ transformed data {
       
           array[n_tests] int<lower=1> n_cat;
           int n_cat_max = n_thr_max + 1; //// Number of ordinal categories for index test
-          int n_total_cutpoints = 0;     //// total C across ALL tests
-          int N_obs = 0;                 //// The TOTAL number of observed data points across ALL studies and ALL tests and ALL thresholds
+          int n_total_cutpoints = 0;     //// total cutpoints across ALL tests
+          int n_total_cat = 0;     //// total # categories across ALL tests
+          
+          // for (t in 1:n_tests) {
+          //     n_total_cutpoints += n_thr[t];
+          // }
           
           for (t in 1:n_tests) {
               n_cat[t] = n_thr[t] + 1;
           }
           
-          for (c in 1:2) {
-              for (s in 1:n_studies) {
-                  for (t in 1:n_tests) {
-                      for (k in 1:n_thr[t]) {
-                            int obs_ind = indicator_test_in_study[s, t];
-                            if (obs_ind == 1) { //// Only increment if data point is actually observed
-                                N_obs += 1;
-                            }
-                      }
-                  }
-              }
-          }
-          
           for (t in 1:n_tests) {
-              n_total_cutpoints += n_thr[t];
+            for (s in 1:n_studies) {
+              
+                if (indicator_test_in_study[s, t] == 1) {
+                      // for (cut_i in 1:n_obs_cutpoints[s, t]) { //// only loop through the OBSERVED cutpoints for test t in study s
+                      for (k in 1:n_thr[t]) {
+                           n_total_cutpoints += 1;
+                      }
+                      for (k in 1:n_cat[t]) {
+                           n_total_cat += 1;
+                      }
+                }
+            }
           }
           
 }
@@ -195,7 +197,7 @@ transformed parameters {
           //// Initialise matrices:
           ////
           for (t in 1:n_tests) {
-              C[t]         = rep_vector(0.0, n_thr_max);
+              C[t] = rep_vector(0.0, n_thr_max);
           }
           ////
           //// Construct cutpoints for each test:
@@ -406,10 +408,10 @@ model {
           ////
           //// Induced-dirichlet ** Prior ** model (NOT actual between-study model because the cutpoints are fixed between studies for this model variation). 
           ////
+          target += Jacobian_C; // Jacobian for transfomation C_raw -> C.
           for (t in 1:n_tests) {
                  vector[n_thr[t]] rho =  normal_pdf(Ind_Dir_cumul[t][1:n_thr[t]], 0.0, 1.0);   //  p_cumul[k - 1] * (1.0 - p_cumul[k - 1]); // original
                  target += induced_dirichlet_v2_lpdf(Ind_Dir_ord_prob[t][1:n_cat[t]] | rho, prior_alpha[t][1:n_thr[t]]);
-                 target += Jacobian_C; // Jacobian for transfomation C_raw -> C.
           }
           ////
           //// Likelihood / Model:
