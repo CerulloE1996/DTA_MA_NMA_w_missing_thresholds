@@ -140,8 +140,8 @@ transformed parameters {
         }
         
         for (c in 1:2) {
-            scale[c, ] = exp(raw_scale[c, ]); //// log1p_exp(raw_scale[c, ]);
-            Jacobian_raw_scale_to_scale += sum(raw_scale[c, ]); //// sum(log_inv_logit(raw_scale[c, ]));
+            scale[c, ] =  log1p_exp(raw_scale[c, ]);
+            Jacobian_raw_scale_to_scale += sum(log_inv_logit(raw_scale[c, ]));
         }
         ////
         //// Likelihood using binomial factorization:
@@ -253,7 +253,7 @@ generated quantities {
           array[2] matrix[n_studies, n_thr] dev;
           corr_matrix[2] beta_Omega;
           corr_matrix[2] raw_scale_Omega;
-          vector[2] scale_mu = exp(raw_scale_mu);
+          vector[2] scale_mu = log1p_exp(raw_scale_mu);
           
           //// Compute between-study correlation matrices:
           beta_Omega       =  multiply_lower_tri_self_transpose(beta_L_Omega);
@@ -286,7 +286,7 @@ generated quantities {
           {
                 vector[2] beta_pred      =  to_vector(multi_normal_cholesky_rng(beta_mu,     diag_pre_multiply(beta_SD, beta_L_Omega)));
                 vector[2] raw_scale_pred =  to_vector(multi_normal_cholesky_rng(raw_scale_mu, diag_pre_multiply(raw_scale_SD, raw_scale_L_Omega)));
-                vector[2] scale_pred = exp(raw_scale_pred);
+                vector[2] scale_pred = log1p_exp(raw_scale_pred);
                 ////
                 for (k in 1:n_thr) {
                       Fp_pred[k] =   1.0 - Phi((C[k] - beta_pred[1])/scale_pred[1]);

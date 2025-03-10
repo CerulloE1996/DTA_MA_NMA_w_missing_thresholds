@@ -135,8 +135,8 @@ parameters {
         vector[n_studies] beta_z;
         ////
         real raw_scale_mu;    
-        real<lower=0.0> raw_scale_SD;   
-        vector[n_studies] raw_scale_z;
+        // real<lower=0.0> raw_scale_SD;   
+        // vector[n_studies] raw_scale_z;
         ////
         array[n_studies] ordered[n_thr] C_nd; // study-specific cutpoints
         simplex[n_cat] dirichlet_cat_means_phi;
@@ -222,12 +222,12 @@ transformed parameters {
             // }
             for (s in 1:n_studies) {
                 real raw_beta_baseline  = beta_mu      + beta_SD      * beta_z[s];
-                real raw_scale_baseline = raw_scale_mu + raw_scale_SD * raw_scale_z[s];
+                real raw_scale_baseline = raw_scale_mu; ///  + raw_scale_SD * raw_scale_z[s];
                 ////
                 locations[1, s] = (-1)*(-0.5)*raw_beta_baseline;
                 locations[2, s] = (-1)*(+0.5)*raw_beta_baseline;
-                scales[1, s] = exp(-0.5*raw_scale_baseline);
-                scales[2, s] = exp(+0.5*raw_scale_baseline);
+                scales[1, s] = log1p_exp(-0.5*raw_scale_baseline);
+                scales[2, s] = log1p_exp(+0.5*raw_scale_baseline);
             //     //// Jacobian for raw_scale -> scale:
             //     Jacobian_raw_scale_to_scale += +log(2) - 0.5*raw_scale_baseline; //// deriv of exp(-0.5*raw_scale_baseline) = -0.5*exp(-0.5*raw_scale_baseline) -> log_abs_deriv = +log(2) -0.5*raw_scale_baseline; //// log_inv_logit(raw_scale_nd);
             //     Jacobian_raw_scale_to_scale += +log(2) + 0.5*raw_scale_baseline; //// deriv of exp(+0.5*raw_scale_baseline) = +0.5*exp(+0.5*raw_scale_baseline) -> log_abs_deriv = -log(2) +0.5*raw_scale_baseline; //// log_inv_logit(raw_scale_nd);
@@ -318,7 +318,7 @@ model {
             beta_SD ~ normal(prior_beta_SD_mean, prior_beta_SD_SD);
             //// scales:
             raw_scale_mu ~ normal(prior_raw_scale_mu_mean, prior_raw_scale_mu_SD);
-            raw_scale_SD ~ normal(prior_raw_scale_SD_mean, prior_raw_scale_SD_SD);
+            ////  raw_scale_SD ~ normal(prior_raw_scale_SD_mean, prior_raw_scale_SD_SD);
         }
         ////
         //// Induced-dirichlet between study ** model ** (NOT a prior model here but part of the actual likelihood since random-effect cutpoints!):
@@ -348,7 +348,7 @@ model {
         // target += Jacobian_raw_scale_to_scale;
         {
             to_vector(beta_z) ~ std_normal();   // (part of between-study model, NOT prior)
-            to_vector(raw_scale_z) ~ std_normal();  // (part of between-study model, NOT prior)
+            ////  to_vector(raw_scale_z) ~ std_normal();  // (part of between-study model, NOT prior)
         }
         ////
         //// Increment the log-likelihood:
@@ -489,8 +489,8 @@ generated quantities {
           {
             real location_nd = (-1)*(-0.5)*beta_mu;
             real location_d  = (-1)*(+0.5)*beta_mu;
-            real scale_nd = exp(-0.5*raw_scale_mu);
-            real scale_d  = exp(+0.5*raw_scale_mu); // This corresponds to the MEDIAN of log-normal (could also use mean which is e.g.,: "scale_nd = exp(-0.5*(raw_scale_mu + 0.5*raw_scale_SD"))"
+            real scale_nd = log1p_exp(-0.5*raw_scale_mu);
+            real scale_d  = log1p_exp(+0.5*raw_scale_mu); // This corresponds to the MEDIAN of log-normal (could also use mean which is e.g.,: "scale_nd = exp(-0.5*(raw_scale_mu + 0.5*raw_scale_SD"))"
             for (k in 1:n_thr) {
                   Fp[k] =   1.0 - Phi((C_MU[k] - location_nd)/scale_nd);
                   Sp[k] =   1.0 - Fp[k];
@@ -502,12 +502,12 @@ generated quantities {
           ////
           {
               real beta_pred      = normal_rng(beta_mu,      beta_SD);
-              real raw_scale_pred = normal_rng(raw_scale_mu, raw_scale_SD);
+              real raw_scale_pred = raw_scale_mu; ///// normal_rng(raw_scale_mu, raw_scale_SD);
               ////
               real location_nd = (-1)*(-0.5)*beta_pred;
               real location_d  = (-1)*(+0.5)*beta_pred;
-              real scale_nd = exp(-0.5*raw_scale_pred);
-              real scale_d  = exp(+0.5*raw_scale_pred); // This corresponds to the MEDIAN of log-normal (could also use mean which is e.g.,: "scale_nd = exp(-0.5*(raw_scale_pred + 0.5*raw_scale_SD"))"
+              real scale_nd = log1p_exp(-0.5*raw_scale_pred);
+              real scale_d  = log1p_exp(+0.5*raw_scale_pred); // This corresponds to the MEDIAN of log-normal (could also use mean which is e.g.,: "scale_nd = exp(-0.5*(raw_scale_pred + 0.5*raw_scale_SD"))"
               ////
               for (k in 1:n_thr) {
                       Fp_pred[k] =   1.0 - Phi((C_mu_pred[k] - location_nd)/scale_nd);
