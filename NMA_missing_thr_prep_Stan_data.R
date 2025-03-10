@@ -3,7 +3,7 @@
 
 ## setwd("/home/enzocerullo/Documents/Work/PhD_work/DTA_MA_NMA_w_missing_thresholds")
 
-source("R_fn_load_data_ordinal_MA_LC_MVP_sim.R")
+source("R_fn_load_data_ordinal_NMA_LC_MVP_sim.R")
 
 require(dplyr)
 require(cmdstanr)
@@ -224,7 +224,7 @@ print(paste("x_diseased_cumulative = ")) ; print(x_diseased_cumulative)
         Stan_data_list$n_thr <- n_thr[-c(1)] ## exclude the reference test
         Stan_data_list$n_thr_max <- max(n_thr[-c(1)])
         ##
-        Stan_data_list$n_tests_per_study <- n_tests_per_study - 1
+        Stan_data_list$n_index_tests_per_study <- n_index_tests_per_study
         ##
         ## Index tests only:
         ##
@@ -371,7 +371,7 @@ print(paste("x_diseased_cumulative = ")) ; print(x_diseased_cumulative)
         Stan_data_list$prior_beta_SD_mean <- rep(0.0,  n_index_tests)
         Stan_data_list$prior_beta_SD_SD   <- rep(0.50, n_index_tests)  ##* 1.702
         ##
-        Stan_data_list$prior_raw_scale_mu_mean <- rep(0.50, n_index_tests) ## since using: scale = log(1 + exp(raw_scale)) NOT scale = exp(raw_scale). 
+        Stan_data_list$prior_raw_scale_mu_mean <- rep(0.0, n_index_tests)  ## rep(0.50, n_index_tests) ## since using: scale = log(1 + exp(raw_scale)) NOT scale = exp(raw_scale). 
         Stan_data_list$prior_raw_scale_mu_SD   <- rep(1.0,  n_index_tests)  ##* 1.702
         Stan_data_list$prior_raw_scale_SD_mean <- rep(0.0,  n_index_tests)
         Stan_data_list$prior_raw_scale_SD_SD   <- rep(0.50, n_index_tests) ##* 1.702
@@ -382,13 +382,13 @@ print(paste("x_diseased_cumulative = ")) ; print(x_diseased_cumulative)
         ##
         Stan_data_list$prior_beta_mu_mean  <- rep(0.0,  n_index_tests)
         Stan_data_list$prior_beta_mu_SD    <- rep(1.0,  n_index_tests)  ## * 1.702
-        Stan_data_list$prior_beta_tau_SD   <- rep(1.0,  n_index_tests)
-        Stan_data_list$prior_beta_sigma_SD <- 1.0
+        Stan_data_list$prior_beta_tau_SD   <- rep(2.5,  n_index_tests)
+        Stan_data_list$prior_beta_sigma_SD <- 2.5 # 1.0
         ##
         Stan_data_list$prior_raw_scale_mu_mean  <- rep(0.0,  n_index_tests)
         Stan_data_list$prior_raw_scale_mu_SD    <- rep(1.0,  n_index_tests)  ## * 1.702
-        Stan_data_list$prior_raw_scale_tau_SD   <- rep(1.0,  n_index_tests)
-        Stan_data_list$prior_raw_scale_sigma_SD <- 1.0
+        Stan_data_list$prior_raw_scale_tau_SD   <- rep(2.5,  n_index_tests)
+        Stan_data_list$prior_raw_scale_sigma_SD <- 2.5 # 1.0
         # ##
         # Stan_data_list$x_cat <- x_cat
         ##
@@ -411,7 +411,7 @@ print(paste("x_diseased_cumulative = ")) ; print(x_diseased_cumulative)
                         ##
                         for (s in 1:n_studies) {
                                
-                            if (indicator_index_test_in_study[s, t] == 1) {
+                            # if (indicator_index_test_in_study[s, t] == 1) {
                                         ####  for (cut_i in 1:n_obs_cutpoints[s, t]) { //// only loop through the OBSERVED cutpoints for test t in study s
                                         for (k in 1:n_thr_t) {
                                           n_total_cutpoints = n_total_cutpoints + 1;
@@ -419,7 +419,7 @@ print(paste("x_diseased_cumulative = ")) ; print(x_diseased_cumulative)
                                         for (k in 1:n_cat_t) {
                                           n_total_cat = n_total_cat + 1;
                                         }
-                            }
+                            # }
                           
                         }
                         

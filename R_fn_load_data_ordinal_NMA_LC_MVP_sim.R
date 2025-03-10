@@ -109,7 +109,7 @@ simulate_binary_and_ordinal_MA_LC_MVP_data <- function(   n_studies = 25,
      t <- 2
      
      100*(1.0 - pnorm((Mean_thresholds_for_test_3 - location_d[3])/exp(scale_nd[3])))
-     true_Se_OVERALL
+     
      
      pnorm(location_d[3] - Mean_thresholds_for_test_3 )
      
@@ -492,6 +492,30 @@ simulate_binary_and_ordinal_MA_LC_MVP_data <- function(   n_studies = 25,
                      }
            }
            
+           {
+                 
+                 n_nd_list_new <- n_d_list_new <- list()
+                 
+                 for (t in 2:n_tests) { ## skip the BINARY reference test (test 1)
+                   n_nd_list_new[[t - 1]] <- matrix(NA, n_studies, n_thr_t)
+                   n_d_list_new[[t - 1]]  <- matrix(NA, n_studies, n_thr_t)
+                 }
+                 
+                 for (s in 1:n_studies) {
+                   for (t in 2:n_tests) {
+                     n_thr_t <- n_thr[t]
+                     n_cat_t <- n_thr_t + 1
+                     ##
+                     n_nd_list_new[[t - 1]][s, 1:n_thr_t] <-  n_nd_list[[t - 1]][s, 2:n_cat_t]
+                     n_d_list_new[[t - 1]][s, 1:n_thr_t]  <-  n_d_list[[t - 1]][s, 2:n_cat_t]
+                   }
+                 }
+                 
+                 n_nd_list <- n_nd_list_new
+                 n_d_list  <- n_d_list_new
+             
+           }
+           
          
          return(list(
            n_total_nd = n_total_nd,
@@ -760,12 +784,19 @@ box_cox_grid <- function(x,
 
 
 
-individual_obs_tibble <- x_individual
-group_name <- "non-diseased"
-study_index <- 1
+
+
+
+
+
 
 # 
+# individual_obs_tibble <- x_individual
+# group_name <- "non-diseased"
+# study_index <- 1
 # 
+# # 
+# # 
 # # Check what study_id values exist
 # unique_studies <- unique(individual_obs_tibble$study_id)
 # print("Available study IDs:")
@@ -912,7 +943,7 @@ bc_density <- function(x,
 }
 
 
-study_indexes <- c(1:n_studies)
+# study_indexes <- c(1:n_studies)
 
 ##
 ## Function to fit distributions and create plots:
