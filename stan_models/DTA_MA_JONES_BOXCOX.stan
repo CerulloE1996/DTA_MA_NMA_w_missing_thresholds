@@ -1,102 +1,55 @@
 
 
-functions {
-        
-      //// Box-Cox transform function:
-      real box_cox( real x, 
-                    real lambda) {
-            
-            if (lambda == 0.0) {
-              if (x != 0.0) {
-                return log(x);
-              } else { 
-                return -700.0;
-              }
-            } else {
-                return (pow(x, lambda) - 1.0) / lambda;
-            }
-          
-      }
-      
-      //// Vectorized Box-Cox transform function:
-      vector box_cox( vector x, 
-                      real lambda) {
-                               
-            int N = num_elements(x);
-            vector[N] result;
-            
-            for (n in 1:N) {
-              
-                if (lambda == 0.0) {
-                    if (x[n] != 0.0) {
-                         result[n] = log(x[n]); 
-                    } else { 
-                         result[n] = -700.0;
-                    }
-                } else {
-                     result[n] = (pow(x[n], lambda) - 1.0) / lambda;
-                }
-                
-            }
-            
-            return result;
-          
-      }
-        
-  
-}
-
+////
+//// Include files to compile the necessary Stan functions:
+////
+#include "Stan_fns_Box_Cox.stan"
 
 data {
-  
-      int<lower=1> n_studies;
-      int<lower=1> n_thr;
-      array[n_studies] int n_obs_cutpoints;
-      ////
-      array[2] matrix[n_studies, n_thr] x_with_missings;
-      array[2] matrix[n_studies, n_thr] n;
-      array[2] matrix[n_studies, n_thr] x;
-      array[2] matrix[n_studies, n_thr] cutpoint_index;
-      vector[n_thr] cts_thr_values;
-      //// Priors:
-      vector[2] prior_beta_mu_mean;
-      vector[2] prior_beta_mu_SD;
-      vector[2] prior_beta_SD_mean;
-      vector[2] prior_beta_SD_SD;
-      ///
-      vector[2] prior_raw_scale_mu_mean;
-      vector[2] prior_raw_scale_mu_SD;
-      vector[2] prior_raw_scale_SD_mean;
-      vector[2] prior_raw_scale_SD_SD;
-      //// Other:
-      int prior_only;
-      int use_box_cox;
-      vector[2] prior_boxcox_lambda_mean;
-      vector<lower=0.0>[2] prior_boxcox_lambda_SD;
-  
-}
-
-
-transformed data { 
     
-        int n_cat = n_thr + 1; //// Number of ordinal categories for index test
-   
+        int<lower=1> n_studies;
+        int<lower=1> n_thr;
+        array[n_studies] int n_obs_cutpoints;
+        ////
+        array[2] matrix[n_studies, n_thr] x_with_missings;
+        array[2] matrix[n_studies, n_thr] n;
+        array[2] matrix[n_studies, n_thr] x;
+        array[2] matrix[n_studies, n_thr] cutpoint_index;
+        vector[n_thr] cts_thr_values;
+        //// Priors:
+        vector[2] prior_beta_mu_mean;
+        vector[2] prior_beta_mu_SD;
+        vector[2] prior_beta_SD_mean;
+        vector[2] prior_beta_SD_SD;
+        ////
+        vector[2] prior_raw_scale_mu_mean;
+        vector[2] prior_raw_scale_mu_SD;
+        vector[2] prior_raw_scale_SD_mean;
+        vector[2] prior_raw_scale_SD_SD;
+        ////
+        real prior_boxcox_lambda_mean;
+        real prior_boxcox_lambda_SD;
+        //// Other:
+        int prior_only;
+        int use_box_cox;
+        int use_softplus_for_scales;
+  
 }
 
 
 parameters {
-  
-      vector[2] beta_mu;    
-      vector<lower=0.0>[2] beta_SD;   
-      matrix[2, n_studies] beta_z;    // Study-specific random effects for beta (off-centered parameterisation)
-      cholesky_factor_corr[2] beta_L_Omega;
-      ////
-      vector[2] raw_scale_mu;    
-      vector<lower=0.0>[2] raw_scale_SD;   
-      matrix[2, n_studies] raw_scale_z;    // Study-specific random effects for beta (off-centered parameterisation)
-      cholesky_factor_corr[2] raw_scale_L_Omega;
-      ////
-      real<lower=-5.0, upper = 5.0> lambda;   // box-cox params
+    
+        vector[2] beta_mu;    
+        vector<lower=0.0>[2] beta_SD;   
+        matrix[2, n_studies] beta_z;    // Study-specific random effects for beta (off-centered parameterisation)
+        cholesky_factor_corr[2] beta_L_Omega;
+        ////
+        vector[2] raw_scale_mu;    
+        vector<lower=0.0>[2] raw_scale_SD;   
+        matrix[2, n_studies] raw_scale_z;    // Study-specific random effects for beta (off-centered parameterisation)
+        cholesky_factor_corr[2] raw_scale_L_Omega;
+        ////
+        real<lower=-5.0, upper=5.0> lambda;   // box-cox params
   
 }
 
@@ -126,11 +79,9 @@ transformed parameters {
                  log_lik[c]          = rep_matrix(0.0, n_studies, n_thr);
         }
         ////
-        if (use_box_cox == 0) {
-              C  = log(cts_thr_values);
-        } else { 
-              C  = box_cox(cts_thr_values, lambda);
-        }
+        //// Compute cutpoints using either log or box-cox transform:
+        ////
+        C = ((use_box_cox == 0) ? log(cts_thr_values) : box_cox(cts_thr_values, lambda)); 
         ////
         //// Between-study model for the location parameters ("beta") and the raw_scale parameters - models between-study correlation:
         ////
@@ -138,11 +89,11 @@ transformed parameters {
              beta[, s]      =  beta_mu      + diag_pre_multiply(beta_SD, beta_L_Omega) * beta_z[, s];
              raw_scale[, s] =  raw_scale_mu + diag_pre_multiply(raw_scale_SD, raw_scale_L_Omega) * raw_scale_z[, s];
         }
-        
-        for (c in 1:2) {
-            scale[c, ] = exp(raw_scale[c, ]); //// log1p_exp(raw_scale[c, ]);
-            Jacobian_raw_scale_to_scale += sum(raw_scale[c, ]); //// sum(log_inv_logit(raw_scale[c, ]));
-        }
+        //// 
+        //// Compute scales and Jacobian adjustment for raw_scale -> scale transformation:
+        ////
+        scale                       =  ((use_softplus_for_scales == 1) ? log1p_exp(raw_scale)          : exp(raw_scale));
+        Jacobian_raw_scale_to_scale =  ((use_softplus_for_scales == 1) ? sum(log_inv_logit(raw_scale)) : sum(raw_scale));
         ////
         //// Likelihood using binomial factorization:
         ////
@@ -164,63 +115,63 @@ transformed parameters {
         //// ------- Binomial likelihood:
         ////
         for (s in 1:n_studies) { 
-                for (c in 1:2) {
-                      for (cut_i in 1:n_obs_cutpoints[s]) {
-                              // Current and next cumulative counts
-                              int x_current = to_int(x[c][s, cut_i]);
-                              int x_next    = to_int(n[c][s, cut_i]);
-                              
-                              // Skip if the current count is zero (no observations to classify)
-                              if (x_current != 0)  {
-                              
-                                    // Conditional probability of being at or below the current cutpoint - given being at or below the next cutpoint
-                                    if (cut_i == n_obs_cutpoints[s]) { 
-                                             cond_prob[c][s, cut_i] = cumul_prob[c][s, cut_i] / 1.0;
-                                    } else {
-                                          if (x_next > 0) { 
-                                             cond_prob[c][s, cut_i] = cumul_prob[c][s, cut_i] / cumul_prob[c][s, cut_i + 1];
-                                          } else { 
-                                             cond_prob[c][s, cut_i] = 1.0;
-                                          }
-                                    }
-                                    
-                                    // Binomial for observations at or below current cutpoint out of those at or below next cutpoint
-                                    log_lik[c][s, cut_i] = binomial_lpmf(x_current | x_next, cond_prob[c][s, cut_i]);
-                                    
-                              }
-                      }
-                }
+                  for (c in 1:2) {
+                        for (cut_i in 1:n_obs_cutpoints[s]) {
+                                //// Current and next cumulative counts
+                                int x_current = to_int(x[c][s, cut_i]);
+                                int x_next    = to_int(n[c][s, cut_i]);
+                                
+                                //// Skip if the current count is zero (no observations to classify)
+                                if (x_current != 0)  {
+                                
+                                      // Conditional probability of being at or below the current cutpoint - given being at or below the next cutpoint
+                                      if (cut_i == n_obs_cutpoints[s]) { 
+                                               cond_prob[c][s, cut_i] = cumul_prob[c][s, cut_i] / 1.0;
+                                      } else {
+                                            if (x_next > 0) { 
+                                               cond_prob[c][s, cut_i] = cumul_prob[c][s, cut_i] / cumul_prob[c][s, cut_i + 1];
+                                            } else { 
+                                               cond_prob[c][s, cut_i] = 1.0;
+                                            }
+                                      }
+                                      
+                                      // Binomial for observations at or below current cutpoint out of those at or below next cutpoint
+                                      log_lik[c][s, cut_i] = binomial_lpmf(x_current | x_next, cond_prob[c][s, cut_i]);
+                                      
+                                }
+                        }
+                  }
         }
       
 }
 
 
 model {
-      
-        //// Priors:
+       
+        ////
+        //// Priors for locations:
+        ////
         beta_mu ~ normal(prior_beta_mu_mean, prior_beta_mu_SD);
         beta_SD ~ normal(prior_beta_SD_mean, prior_beta_SD_SD);
         beta_L_Omega ~ lkj_corr_cholesky(2.0);
         ////
+        //// Priors for scales:
+        ////
         raw_scale_mu ~ normal(prior_raw_scale_mu_mean, prior_raw_scale_mu_SD);
         raw_scale_SD ~ normal(prior_raw_scale_SD_mean, prior_raw_scale_SD_SD);
         raw_scale_L_Omega ~ lkj_corr_cholesky(2.0);
-        
-        //// Likelihood / Model:
-        for (c in 1:2) {
-             to_vector(beta_z[c, ]) ~ std_normal(); // (part of between-study model, NOT prior)
-             to_vector(raw_scale_z[c, ]) ~ std_normal(); // (part of between-study model, NOT prior)
-        }
-        
-        //// For box-cox parameters:
+        ////
+        //// Prior for box-cox parameters:
+        ////
         target +=  normal_lpdf(lambda | prior_boxcox_lambda_mean, prior_boxcox_lambda_SD);
-        
-        //// Jacobian adjustments needed:
+        ////
+        //// Jacobian adjustments needed for raw_scale -> scale transforms:
+        ////
         { 
             target +=  Jacobian_raw_scale_to_scale;
             //// Also need the Jacobian to go from (raw_scale_z, raw_scale_mu, raw_scale_SD) -> raw_scale! (using chain rule):
             if (abs(sum(raw_scale_SD)) != 0.0) target += log(abs(sum(raw_scale_SD)));      // double-checked the log-derivative of this by hand (correct)
-            if (abs(sum(raw_scale_z)) != 0.0)  target += log(abs(sum(raw_scale_z)));  // double-checked the log-derivative of this by hand (correct)
+            if (abs(sum(raw_scale_z)) != 0.0)  target += log(abs(sum(raw_scale_z)));       // double-checked the log-derivative of this by hand (correct)
         }
                     
         //// Likelihood using binomial factorization:

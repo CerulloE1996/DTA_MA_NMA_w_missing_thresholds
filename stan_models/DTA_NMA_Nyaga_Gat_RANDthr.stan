@@ -1,127 +1,12 @@
 
 
-functions {
-  
-          // Normal PDF for a real input
-          real normal_pdf( real x, 
-                           real mu, 
-                           real sigma) {
-                             
-                   real sqrt_2_pi = sqrt(2 * pi());
-                   return (1.0 / (sigma * sqrt_2_pi)) * exp(-0.5 * ((x - mu) / sigma)^2);
-            
-          }
-        
-        
-          // Normal PDF for a vector input
-          vector normal_pdf( vector x, 
-                             real mu, 
-                             real sigma) {
+////
+//// Include files to compile the necessary Stan functions:
+////
+#include "Stan_fns_basic.stan"
+#include "Stan_fns_included_Dirichlet.stan"
+#include "Stan_fns_simplex.Stan"
 
-                    real sqrt_2_pi = sqrt(2 * pi());
-                    return (1.0 / (sigma .* sqrt_2_pi)) * exp(-0.5 * ((x - mu) ./ sigma)^2);
-
-          }
-          
-          // Overload for vector mean, vector sigma
-          vector normal_pdf( vector x, 
-                             vector mu, 
-                             vector sigma) {
-            
-                    real sqrt_2_pi = sqrt(2 * pi());
-                    return (1.0 / (sigma * sqrt_2_pi)) .* exp(-0.5 * ((x - mu) ./ sigma)^2);
-          
-        }
-              //// Induced-Dirichlet ("ind_dir") log-density function:
-        //// NOTE: You can use this for both ind_dir PRIORS and ind_dir MODELS:
-        real induced_dirichlet_v2_lpdf(  vector p_ord,
-                                         vector rho,
-                                         vector alpha) {
-                  
-                    int n_cat = num_elements(p_ord);
-                    matrix[n_cat, n_cat] J = rep_matrix(0.0, n_cat, n_cat);
-                    
-                    //// Jacobian computation:
-                    for (k in 1:n_cat) {
-                            J[k, 1] = 1.0;
-                    }
-                    for (k in 2:n_cat) {
-                            // real rho =  normal_pdf(inv_Phi( p_cumul[k - 1])); //  p_cumul[k - 1] * (1.0 - p_cumul[k - 1]); // original
-                            J[k, k] = +rho[k - 1];
-                            J[k - 1, k] = -rho[k - 1];
-                    }
-                    
-                    return dirichlet_lpdf(p_ord | alpha) + log_determinant(J);
-          
-        }
-        
-        real median(vector x) {
-      
-                    int n = num_elements(x);
-                    vector[n] sorted_x = sort_asc(x);
-                    
-                    if (n % 2 == 0) {   // For even number of elements, average the middle two
-                        int left_element = to_int(n/2.0);
-                        int right_element = to_int(n/2.0 + 1.0);
-                        return (sorted_x[left_element] + sorted_x[right_element]) / 2.0;
-                    } else {            // For odd number of elements, return the middle one
-                        int middle_element = to_int((n+1.0)/2.0);
-                        return sorted_x[middle_element];
-                    }
-       }
-       
-       real median(row_vector x) {
-      
-                    int n = num_elements(x);
-                    row_vector[n] sorted_x = sort_asc(x);
-                    
-                    if (n % 2 == 0) {   // For even number of elements, average the middle two
-                        int left_element = to_int(n/2.0);
-                        int right_element = to_int(n/2.0 + 1.0);
-                        return (sorted_x[left_element] + sorted_x[right_element]) / 2.0;
-                    } else {    // For odd number of elements, return the middle one
-                        int middle_element = to_int((n+1.0)/2.0);
-                        return sorted_x[middle_element];
-                    }
-       }
-       
-       //// Adapted from: ////https://github.com/mjhajharia/transforms/blob/main/transforms/simplex/StickbreakingLogistic.stan
-       vector stickbreaking_logistic_simplex_constrain(vector y) {
-            
-                    //// Initialise Jacobian:
-                    real Jacobian = 0.0;
-                    
-                    //// Other variables:
-                    int N = rows(y) + 1;
-                    vector[N] x;
-                    real log_zi;
-                    real log_xi;
-                    real log_cum_prod = 0;
-                    
-                    //// Construct simplex:
-                    for (i in 1:(N - 1)) {
-                        log_zi = log_inv_logit(y[i] - log(N - i)); // logistic_lcdf(y[i] | log(N - i), 1)
-                        log_xi = log_cum_prod + log_zi;
-                        x[i] = exp(log_xi);
-                        log_cum_prod += log1m_exp(log_zi);
-                        Jacobian += log_xi;
-                    }   
-                    
-                    x[N] = exp(log_cum_prod);
-                    
-                    //// Increment Jacobian adjustment:
-                    Jacobian += log_cum_prod;
-                    
-                    //// Output vector (1st element is the Jacobian adjustment):
-                    vector[N + 1] out_vec;
-                    out_vec[1] = Jacobian;
-                    out_vec[2:(N + 1)] = x;
-                    return out_vec;
-        
-       }
-  
-
-}
 
 
 data {
@@ -171,6 +56,7 @@ data {
           //// Other:
           int prior_only;
           vector[n_index_tests] kappa_lb;
+          int use_softplus_for_scales;
   
 }
 

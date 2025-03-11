@@ -1,93 +1,10 @@
 
 
-functions {
-  
-          // Normal PDF for a real input
-          real normal_pdf( real x, 
-                           real mu, 
-                           real sigma) {
-                             
-               real sqrt_2_pi = sqrt(2 * pi());
-               return (1.0 / (sigma * sqrt_2_pi)) * exp(-0.5 * ((x - mu) / sigma)^2);
-            
-          }
-        
-        
-          // Normal PDF for a vector input
-          vector normal_pdf( vector x, 
-                             real mu, 
-                             real sigma) {
-
-                real sqrt_2_pi = sqrt(2 * pi());
-                return (1.0 / (sigma .* sqrt_2_pi)) * exp(-0.5 * ((x - mu) ./ sigma)^2);
-
-          }
-          
-          // Overload for vector mean, vector sigma
-          vector normal_pdf( vector x, 
-                             vector mu, 
-                             vector sigma) {
-            
-                real sqrt_2_pi = sqrt(2 * pi());
-                return (1.0 / (sigma * sqrt_2_pi)) .* exp(-0.5 * ((x - mu) ./ sigma)^2);
-          
-        }
-              //// Induced-Dirichlet ("ind_dir") log-density function:
-        //// NOTE: You can use this for both ind_dir PRIORS and ind_dir MODELS:
-        real induced_dirichlet_v2_lpdf(  vector p_ord,
-                                         vector rho,
-                                         vector alpha) {
-                  
-                int n_cat = num_elements(p_ord);
-                matrix[n_cat, n_cat] J = rep_matrix(0.0, n_cat, n_cat);
-                
-                //// Jacobian computation:
-                for (k in 1:n_cat) {
-                        J[k, 1] = 1.0;
-                }
-                for (k in 2:n_cat) {
-                        // real rho =  normal_pdf(inv_Phi( p_cumul[k - 1])); //  p_cumul[k - 1] * (1.0 - p_cumul[k - 1]); // original
-                        J[k, k] = +rho[k - 1];
-                        J[k - 1, k] = -rho[k - 1];
-                }
-                
-                return dirichlet_lpdf(p_ord | alpha) + log_determinant(J);
-          
-        }
-        
-        real median(vector x) {
-      
-                int n = num_elements(x);
-                vector[n] sorted_x = sort_asc(x);
-                
-                if (n % 2 == 0) {   // For even number of elements, average the middle two
-                    int left_element = to_int(n/2.0);
-                    int right_element = to_int(n/2.0 + 1.0);
-                    return (sorted_x[left_element] + sorted_x[right_element]) / 2.0;
-                } else {            // For odd number of elements, return the middle one
-                    int middle_element = to_int((n+1.0)/2.0);
-                    return sorted_x[middle_element];
-                }
-       }
-       
-       real median(row_vector x) {
-      
-                int n = num_elements(x);
-                row_vector[n] sorted_x = sort_asc(x);
-                
-                if (n % 2 == 0) {   // For even number of elements, average the middle two
-                    int left_element = to_int(n/2.0);
-                    int right_element = to_int(n/2.0 + 1.0);
-                    return (sorted_x[left_element] + sorted_x[right_element]) / 2.0;
-                } else {    // For odd number of elements, return the middle one
-                    int middle_element = to_int((n+1.0)/2.0);
-                    return sorted_x[middle_element];
-                }
-       }
-
-}
-
-
+////
+//// Include files to compile the necessary Stan functions:
+////
+#include "Stan_fns_basic.stan"
+#include "Stan_fns_included_Dirichlet.stan"
 
 
 data {
@@ -114,8 +31,10 @@ data {
         vector<lower=0.0>[n_thr + 1] prior_alpha; // Induced-Dirichlet prior vector 
         //// Other:
         int prior_only;
+        int use_softplus_for_scales;
   
 }
+
 
 transformed data { 
     
@@ -181,7 +100,7 @@ transformed parameters {
         ////
         //// Between-study model for location and scale:
         ////
-        real Jacobian_raw_scale_to_scale = 0.0;
+        //// real Jacobian_raw_scale_to_scale = 0.0;
         {
             ////
             for (s in 1:n_studies) {
@@ -191,11 +110,11 @@ transformed parameters {
                 locations[1, s] = (-1)*(-0.5)*raw_beta_baseline;
                 locations[2, s] = (-1)*(+0.5)*raw_beta_baseline;
                 ////
-                scales[1, s] = exp(-0.5*raw_scale_baseline);
-                scales[2, s] = exp(+0.5*raw_scale_baseline);
+                scales[1, s] = log1p_exp(-0.5*raw_scale_baseline);
+                scales[2, s] = log1p_exp(+0.5*raw_scale_baseline);
                 //// Jacobian for raw_scale -> scale:
-                Jacobian_raw_scale_to_scale += +log(2) - 0.5*raw_scale_baseline; //// deriv of exp(-0.5*raw_scale_baseline) = -0.5*exp(-0.5*raw_scale_baseline) -> log_abs_deriv = +log(2) -0.5*raw_scale_baseline; //// log_inv_logit(raw_scale_nd);
-                Jacobian_raw_scale_to_scale += +log(2) + 0.5*raw_scale_baseline; //// deriv of exp(+0.5*raw_scale_baseline) = +0.5*exp(+0.5*raw_scale_baseline) -> log_abs_deriv = -log(2) +0.5*raw_scale_baseline; //// log_inv_logit(raw_scale_nd);
+                //// Jacobian_raw_scale_to_scale += +log(2) - 0.5*raw_scale_baseline; //// deriv of exp(-0.5*raw_scale_baseline) = -0.5*exp(-0.5*raw_scale_baseline) -> log_abs_deriv = +log(2) -0.5*raw_scale_baseline; //// log_inv_logit(raw_scale_nd);
+                //// Jacobian_raw_scale_to_scale += +log(2) + 0.5*raw_scale_baseline; //// deriv of exp(+0.5*raw_scale_baseline) = +0.5*exp(+0.5*raw_scale_baseline) -> log_abs_deriv = -log(2) +0.5*raw_scale_baseline; //// log_inv_logit(raw_scale_nd);
             }
         }
         ////
@@ -271,7 +190,7 @@ model {
         ////
         //// Likelihood / Model:
         ////
-        target += Jacobian_raw_scale_to_scale;
+        //// target += Jacobian_raw_scale_to_scale;
         {
             to_vector(beta_z) ~ std_normal();       // (part of between-study model, NOT prior)
             to_vector(raw_scale_z) ~ std_normal();  // (part of between-study model, NOT prior)
@@ -325,7 +244,6 @@ generated quantities {
           matrix[n_studies, n_thr] dev_d    = rep_matrix(-1, n_studies, n_thr);
           array[2] matrix[n_studies, n_thr] x_hat;
           array[2] matrix[n_studies, n_thr] dev;
-          int n_sims = 1000;
   
           //// Initialise containers:
           for (c in 1:2) {
@@ -348,8 +266,8 @@ generated quantities {
           {
               real location_nd = (-1)*(-0.5)*beta_mu;
               real location_d  = (-1)*(+0.5)*beta_mu;
-              real scale_nd = exp(-0.5*raw_scale_mu);
-              real scale_d  = exp(+0.5*raw_scale_mu); // This corresponds to the MEDIAN of log-normal (could also use mean which is e.g.,: "scale_nd = exp(-0.5*(raw_scale_mu + 0.5*raw_scale_SD"))"
+              real scale_nd = log1p_exp(-0.5*raw_scale_mu);
+              real scale_d  = log1p_exp(+0.5*raw_scale_mu); // This corresponds to the MEDIAN of log-normal (could also use mean which is e.g.,: "scale_nd = exp(-0.5*(raw_scale_mu + 0.5*raw_scale_SD"))"
               for (k in 1:n_thr) {
                     Fp[k] =   1.0 - Phi((C[k] - location_nd)/scale_nd);
                     Sp[k] =   1.0 - Fp[k];
@@ -365,8 +283,8 @@ generated quantities {
               ////
               real location_nd = (-1)*(-0.5)*beta_pred;
               real location_d  = (-1)*(+0.5)*beta_pred;
-              real scale_nd = exp(-0.5*raw_scale_pred);
-              real scale_d  = exp(+0.5*raw_scale_pred); // This corresponds to the MEDIAN of log-normal (could also use mean which is e.g.,: "scale_nd = exp(-0.5*(raw_scale_pred + 0.5*raw_scale_SD"))"
+              real scale_nd = log1p_exp(-0.5*raw_scale_pred);
+              real scale_d  = log1p_exp(+0.5*raw_scale_pred); // This corresponds to the MEDIAN of log-normal (could also use mean which is e.g.,: "scale_nd = exp(-0.5*(raw_scale_pred + 0.5*raw_scale_SD"))"
               {
                  
                     for (k in 1:n_thr) {
