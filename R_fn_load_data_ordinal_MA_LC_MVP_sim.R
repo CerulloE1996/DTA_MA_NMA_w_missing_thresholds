@@ -473,16 +473,7 @@ simulate_binary_and_ordinal_MA_LC_MVP_data <- function(   n_studies = 25,
  
  
  
- 
- 
- 
-  
-  
- 
- 
- 
- 
- 
+
  
  
  
